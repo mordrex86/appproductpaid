@@ -1,0 +1,104 @@
+{
+  "name": "@checkout/api",
+  "version": "0.0.1",
+  "description": "",
+  "author": "",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "nest build",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "dev": "nest start --watch",
+    "start": "node dist/main.js",
+    "start:debug": "nest start --debug --watch",
+    "lint": "eslint \"{src,test}/**/*.ts\" --max-warnings 0",
+    "lint:fix": "npm run lint -- --fix",
+    "test": "jest --runInBand",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage --runInBand",
+    "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
+    "typecheck": "tsc --noEmit --pretty false"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/config": "^4.0.2",
+    "@nestjs/core": "^11.0.1",
+    "@nestjs/platform-express": "^11.0.1",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@swc/core": "^1.15.18",
+    "@swc/jest": "^0.2.39",
+    "@eslint/eslintrc": "^3.2.0",
+    "@eslint/js": "^9.18.0",
+    "@nestjs/cli": "^11.0.0",
+    "@nestjs/schematics": "^11.0.0",
+    "@nestjs/testing": "^11.0.1",
+    "@types/express": "^5.0.0",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.0.0",
+    "@types/supertest": "^7.0.0",
+    "eslint": "^9.18.0",
+    "eslint-config-prettier": "^10.0.1",
+    "eslint-plugin-prettier": "^5.2.2",
+    "globals": "^17.0.0",
+    "jest": "^30.0.0",
+    "prettier": "^3.4.2",
+    "source-map-support": "^0.5.21",
+    "supertest": "^7.0.0",
+    "ts-loader": "^9.5.2",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0"
+  },
+  "jest": {
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
+    "rootDir": "src",
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.(t|j)s$": [
+        "@swc/jest",
+        {
+          "jsc": {
+            "parser": {
+              "syntax": "typescript",
+              "decorators": true
+            },
+            "transform": {
+              "legacyDecorator": true,
+              "decoratorMetadata": true
+            }
+          },
+          "module": {
+            "type": "commonjs"
+          }
+        }
+      ]
+    },
+    "collectCoverageFrom": [
+      "**/*.ts",
+      "!main.ts",
+      "!**/*.module.ts"
+    ],
+    "coverageDirectory": "../coverage",
+    "coverageProvider": "v8",
+    "coverageThreshold": {
+      "global": {
+        "branches": 81,
+        "functions": 81,
+        "lines": 81,
+        "statements": 81
+      }
+    },
+    "testEnvironment": "node"
+  }
+}
