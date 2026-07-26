@@ -20,6 +20,8 @@
     "typecheck": "tsc --noEmit --pretty false"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1095.0",
+    "@aws-sdk/lib-dynamodb": "^3.1095.0",
     "@codegenie/serverless-express": "^5.0.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
@@ -88,7 +90,8 @@
       "**/*.ts",
       "!main.ts",
       "!lambda.ts",
-      "!**/*.module.ts"
+      "!**/*.module.ts",
+      "!**/*.dto.ts"
     ],
     "coverageDirectory": "../coverage",
     "coverageProvider": "v8",

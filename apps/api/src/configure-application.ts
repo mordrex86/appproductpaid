@@ -29,6 +29,7 @@ export function configureApplication(app: INestApplication): void {
     .setDescription('API para el flujo de compra, pago y entrega.')
     .setVersion('1.0')
     .addTag('health', 'Disponibilidad de la API')
+    .addTag('checkout', 'Producto, cliente, entrega y transacciones')
     .build();
   const documentFactory = () =>
     SwaggerModule.createDocument(app, openApiConfig);
