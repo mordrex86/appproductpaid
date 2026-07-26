@@ -1,8 +1,18 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types';
+import { z } from 'zod';
 import { AppModule } from './../src/app.module';
+import { configureApplication } from './../src/configure-application';
+
+const openApiDocumentSchema = z.object({
+  info: z.object({
+    title: z.string(),
+    version: z.string(),
+  }),
+  paths: z.record(z.string(), z.unknown()),
+});
 
 describe('HealthController (e2e)', () => {
   let app: INestApplication<App>;
@@ -13,14 +23,7 @@ describe('HealthController (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.setGlobalPrefix('api/v1');
-    app.useGlobalPipes(
-      new ValidationPipe({
-        forbidNonWhitelisted: true,
-        transform: true,
-        whitelist: true,
-      }),
-    );
+    configureApplication(app);
     await app.init();
   });
 
@@ -31,6 +34,19 @@ describe('HealthController (e2e)', () => {
       .expect({
         status: 'ok',
       });
+  });
+
+  it('/docs-json (GET)', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/docs-json')
+      .expect(200);
+    const document = openApiDocumentSchema.parse(response.body as unknown);
+
+    expect(document.info).toMatchObject({
+      title: 'Product payment API',
+      version: '1.0',
+    });
+    expect(document.paths).toHaveProperty('/api/v1/health');
   });
 
   afterEach(async () => {
