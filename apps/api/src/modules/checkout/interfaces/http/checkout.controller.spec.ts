@@ -3,15 +3,16 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
+import { SELF_DECLARED_DEPS_METADATA } from '@nestjs/common/constants';
 import {
   IdempotencyConflictError,
   InsufficientStockError,
   ProductNotFoundError,
   TransactionNotFoundError,
 } from '../../application/checkout.errors';
-import type { CreatePendingTransactionUseCase } from '../../application/create-pending-transaction.use-case';
-import type { GetProductUseCase } from '../../application/get-product.use-case';
-import type { GetTransactionUseCase } from '../../application/get-transaction.use-case';
+import { CreatePendingTransactionUseCase } from '../../application/create-pending-transaction.use-case';
+import { GetProductUseCase } from '../../application/get-product.use-case';
+import { GetTransactionUseCase } from '../../application/get-transaction.use-case';
 import type { CreatePendingTransactionDto } from './checkout.dto';
 import { CheckoutController } from './checkout.controller';
 
@@ -45,6 +46,18 @@ describe('CheckoutController', () => {
       postalCode: '110221',
     },
   };
+
+  it('declares its dependencies for bundled Lambda builds', () => {
+    expect(
+      Reflect.getMetadata(SELF_DECLARED_DEPS_METADATA, CheckoutController),
+    ).toEqual(
+      expect.arrayContaining([
+        { index: 0, param: GetProductUseCase },
+        { index: 1, param: CreatePendingTransactionUseCase },
+        { index: 2, param: GetTransactionUseCase },
+      ]),
+    );
+  });
 
   beforeEach(() => {
     jest.resetAllMocks();

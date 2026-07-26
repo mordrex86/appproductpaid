@@ -5,6 +5,7 @@ import {
   Controller,
   Get,
   Headers,
+  Inject,
   NotFoundException,
   Param,
   Post,
@@ -33,8 +34,11 @@ import { CreatePendingTransactionDto } from './checkout.dto';
 @Controller()
 export class CheckoutController {
   constructor(
+    @Inject(GetProductUseCase)
     private readonly getProduct: GetProductUseCase,
+    @Inject(CreatePendingTransactionUseCase)
     private readonly createPendingTransaction: CreatePendingTransactionUseCase,
+    @Inject(GetTransactionUseCase)
     private readonly getTransaction: GetTransactionUseCase,
   ) {}
 
