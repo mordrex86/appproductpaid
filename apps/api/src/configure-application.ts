@@ -1,6 +1,7 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import helmet from 'helmet';
 
 export function configureApplication(app: INestApplication): void {
   const config = app.get(ConfigService);
@@ -10,6 +11,11 @@ export function configureApplication(app: INestApplication): void {
   app.enableCors({
     origin: corsOrigin,
   });
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+    }),
+  );
   app.useGlobalPipes(
     new ValidationPipe({
       forbidNonWhitelisted: true,

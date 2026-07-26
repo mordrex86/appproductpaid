@@ -1,0 +1,269 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: One-time GitHub OIDC bootstrap for product payment deployments
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: product-payment
+    AllowedPattern: '^[a-z][a-z0-9-]{2,30}$'
+  EnvironmentName:
+    Type: String
+    Default: production
+    AllowedValues:
+      - production
+  GitHubOwner:
+    Type: String
+    Default: mordrex86
+  GitHubRepository:
+    Type: String
+    Default: appproductpaid
+  GitHubEnvironment:
+    Type: String
+    Default: production
+  MonthlyBudgetAmount:
+    Type: Number
+    Default: 10
+    MinValue: 1
+  BudgetNotificationEmail:
+    Type: String
+    Description: Email that receives AWS budget alerts
+    Default: ''
+    AllowedPattern: '^$|^[^@\s]+@[^@\s]+\.[^@\s]+$'
+    NoEcho: true
+
+Conditions:
+  HasBudgetNotificationEmail: !Not
+    - !Equals
+      - !Ref BudgetNotificationEmail
+      - ''
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  DeploymentArtifactsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub '${ProjectName}-${EnvironmentName}-artifacts-${AWS::AccountId}-${AWS::Region}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldArtifacts
+            Status: Enabled
+            ExpirationInDays: 30
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 7
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+
+  GitHubDeploymentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${EnvironmentName}-github-deploy'
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubOidcProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub >-
+                  repo:${GitHubOwner}/${GitHubRepository}:environment:${GitHubEnvironment}
+      Policies:
+        - PolicyName: DeployApplication
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ManageApplicationStack
+                Effect: Allow
+                Action:
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:CreateStack
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStackResources
+                  - cloudformation:DescribeStacks
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:GetTemplate
+                  - cloudformation:GetTemplateSummary
+                  - cloudformation:ListStackResources
+                  - cloudformation:UpdateStack
+                Resource:
+                  - !Sub >-
+                    arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ProjectName}-${EnvironmentName}/*
+                  - !Sub >-
+                    arn:${AWS::Partition}:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31
+              - Sid: ManageDeploymentBuckets
+                Effect: Allow
+                Action:
+                  - s3:CreateBucket
+                  - s3:DeleteBucketPolicy
+                  - s3:DeleteObject
+                  - s3:GetBucketOwnershipControls
+                  - s3:GetBucketLocation
+                  - s3:GetBucketPolicy
+                  - s3:GetBucketPublicAccessBlock
+                  - s3:GetBucketTagging
+                  - s3:GetBucketVersioning
+                  - s3:GetEncryptionConfiguration
+                  - s3:GetLifecycleConfiguration
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:ListBucket
+                  - s3:PutBucketPolicy
+                  - s3:PutBucketOwnershipControls
+                  - s3:PutBucketPublicAccessBlock
+                  - s3:PutBucketTagging
+                  - s3:PutBucketVersioning
+                  - s3:PutEncryptionConfiguration
+                  - s3:PutLifecycleConfiguration
+                  - s3:PutObject
+                Resource:
+                  - !GetAtt DeploymentArtifactsBucket.Arn
+                  - !Sub '${DeploymentArtifactsBucket.Arn}/*'
+                  - !Sub >-
+                    arn:${AWS::Partition}:s3:::${ProjectName}-${EnvironmentName}-web-${AWS::AccountId}-${AWS::Region}
+                  - !Sub >-
+                    arn:${AWS::Partition}:s3:::${ProjectName}-${EnvironmentName}-web-${AWS::AccountId}-${AWS::Region}/*
+              - Sid: ManageApplicationServices
+                Effect: Allow
+                Action:
+                  - apigateway:*
+                  - cloudfront:CreateDistribution
+                  - cloudfront:CreateInvalidation
+                  - cloudfront:CreateCachePolicy
+                  - cloudfront:CreateOriginAccessControl
+                  - cloudfront:CreateOriginRequestPolicy
+                  - cloudfront:CreateResponseHeadersPolicy
+                  - cloudfront:DeleteCachePolicy
+                  - cloudfront:DeleteDistribution
+                  - cloudfront:DeleteOriginAccessControl
+                  - cloudfront:DeleteOriginRequestPolicy
+                  - cloudfront:DeleteResponseHeadersPolicy
+                  - cloudfront:GetCachePolicy
+                  - cloudfront:GetDistribution
+                  - cloudfront:GetDistributionConfig
+                  - cloudfront:GetInvalidation
+                  - cloudfront:GetOriginAccessControl
+                  - cloudfront:GetOriginRequestPolicy
+                  - cloudfront:GetResponseHeadersPolicy
+                  - cloudfront:ListTagsForResource
+                  - cloudfront:TagResource
+                  - cloudfront:UntagResource
+                  - cloudfront:UpdateDistribution
+                  - cloudfront:UpdateCachePolicy
+                  - cloudfront:UpdateOriginAccessControl
+                  - cloudfront:UpdateOriginRequestPolicy
+                  - cloudfront:UpdateResponseHeadersPolicy
+                  - dynamodb:CreateTable
+                  - dynamodb:DeleteTable
+                  - dynamodb:DescribeContinuousBackups
+                  - dynamodb:DescribeTable
+                  - dynamodb:ListTagsOfResource
+                  - dynamodb:TagResource
+                  - dynamodb:UpdateContinuousBackups
+                  - dynamodb:UpdateTable
+                  - lambda:AddPermission
+                  - lambda:CreateFunction
+                  - lambda:DeleteFunction
+                  - lambda:GetFunction
+                  - lambda:GetFunctionConfiguration
+                  - lambda:GetPolicy
+                  - lambda:ListTags
+                  - lambda:PublishVersion
+                  - lambda:RemovePermission
+                  - lambda:TagResource
+                  - lambda:UntagResource
+                  - lambda:UpdateFunctionCode
+                  - lambda:UpdateFunctionConfiguration
+                  - logs:CreateLogGroup
+                  - logs:DeleteLogGroup
+                  - logs:DescribeLogGroups
+                  - logs:ListTagsForResource
+                  - logs:PutRetentionPolicy
+                  - logs:TagResource
+                Resource: '*'
+              - Sid: ManageLambdaRole
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:DeleteRolePolicy
+                  - iam:GetRole
+                  - iam:GetRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:PassRole
+                  - iam:PutRolePolicy
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:UpdateAssumeRolePolicy
+                Resource: !Sub >-
+                  arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-${EnvironmentName}-lambda-role
+
+  MonthlyCostBudget:
+    Type: AWS::Budgets::Budget
+    Condition: HasBudgetNotificationEmail
+    Properties:
+      Budget:
+        BudgetName: !Sub '${ProjectName}-${EnvironmentName}-monthly'
+        BudgetLimit:
+          Amount: !Ref MonthlyBudgetAmount
+          Unit: USD
+        BudgetType: COST
+        TimeUnit: MONTHLY
+      NotificationsWithSubscribers:
+        - Notification:
+            ComparisonOperator: GREATER_THAN
+            NotificationType: FORECASTED
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - Address: !Ref BudgetNotificationEmail
+              SubscriptionType: EMAIL
+        - Notification:
+            ComparisonOperator: GREATER_THAN
+            NotificationType: ACTUAL
+            Threshold: 100
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - Address: !Ref BudgetNotificationEmail
+              SubscriptionType: EMAIL
+
+Outputs:
+  AwsAccountId:
+    Description: AWS account expected by GitHub Actions
+    Value: !Ref AWS::AccountId
+  AwsRegion:
+    Description: Region selected for the deployment
+    Value: !Ref AWS::Region
+  DeploymentRoleArn:
+    Description: OIDC role used by the production GitHub environment
+    Value: !GetAtt GitHubDeploymentRole.Arn
+  DeploymentArtifactsBucketName:
+    Description: SAM deployment artifacts bucket
+    Value: !Ref DeploymentArtifactsBucket

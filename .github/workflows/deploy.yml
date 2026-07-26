@@ -1,0 +1,151 @@
+name: Deploy to AWS
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify
+        run: npm run verify
+
+      - name: End-to-end tests
+        run: npm run test:e2e
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_STACK_NAME: product-payment-production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup AWS SAM
+        uses: aws-actions/setup-sam@v2
+
+      - name: Configure temporary AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.1.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          role-session-name: github-production-deploy
+
+      - name: Validate infrastructure
+        run: npm run validate:aws
+
+      - name: Build serverless API
+        run: npm run build:aws
+
+      - name: Deploy infrastructure
+        run: >-
+          sam deploy
+          --stack-name "$AWS_STACK_NAME"
+          --region "$AWS_REGION"
+          --s3-bucket "${{ vars.AWS_ARTIFACT_BUCKET }}"
+          --capabilities CAPABILITY_NAMED_IAM
+          --no-confirm-changeset
+          --no-fail-on-empty-changeset
+          --parameter-overrides
+          ProjectName=product-payment
+          EnvironmentName=production
+
+      - name: Read stack outputs
+        id: outputs
+        shell: bash
+        run: |
+          api_url=$(aws cloudformation describe-stacks \
+            --stack-name "$AWS_STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" \
+            --output text)
+          web_url=$(aws cloudformation describe-stacks \
+            --stack-name "$AWS_STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='WebUrl'].OutputValue" \
+            --output text)
+          web_bucket=$(aws cloudformation describe-stacks \
+            --stack-name "$AWS_STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='WebBucketName'].OutputValue" \
+            --output text)
+          distribution_id=$(aws cloudformation describe-stacks \
+            --stack-name "$AWS_STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='WebDistributionId'].OutputValue" \
+            --output text)
+
+          echo "api_url=$api_url" >> "$GITHUB_OUTPUT"
+          echo "web_url=$web_url" >> "$GITHUB_OUTPUT"
+          echo "web_bucket=$web_bucket" >> "$GITHUB_OUTPUT"
+          echo "distribution_id=$distribution_id" >> "$GITHUB_OUTPUT"
+
+      - name: Build web application
+        run: npm run build --workspace @checkout/web
+
+      - name: Publish web application
+        run: >-
+          aws s3 sync apps/web/dist
+          "s3://${{ steps.outputs.outputs.web_bucket }}"
+          --delete
+          --only-show-errors
+
+      - name: Invalidate web cache
+        run: >-
+          aws cloudfront create-invalidation
+          --distribution-id "${{ steps.outputs.outputs.distribution_id }}"
+          --paths "/*"
+          --output text
+          --query "Invalidation.Id"
+
+      - name: Smoke test deployment
+        shell: bash
+        run: |
+          curl --fail --silent --show-error \
+            "${{ steps.outputs.outputs.api_url }}/api/v1/health"
+          curl --fail --silent --show-error \
+            "${{ steps.outputs.outputs.web_url }}/api/v1/health"
+          curl --fail --silent --show-error \
+            "${{ steps.outputs.outputs.web_url }}" > /dev/null

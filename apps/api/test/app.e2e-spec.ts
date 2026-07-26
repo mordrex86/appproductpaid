@@ -1,10 +1,8 @@
 import { INestApplication } from '@nestjs/common';
-import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { z } from 'zod';
-import { AppModule } from './../src/app.module';
-import { configureApplication } from './../src/configure-application';
+import { createApplication } from './../src/create-application';
 
 const openApiDocumentSchema = z.object({
   info: z.object({
@@ -18,13 +16,7 @@ describe('HealthController (e2e)', () => {
   let app: INestApplication<App>;
 
   beforeEach(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    configureApplication(app);
-    await app.init();
+    app = await createApplication<INestApplication<App>>();
   });
 
   it('/api/v1/health (GET)', () => {

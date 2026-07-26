@@ -1,10 +1,8 @@
 import { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { z } from 'zod';
-import { AppModule } from './app.module';
-import { configureApplication } from './configure-application';
+import { createApplication } from './create-application';
 
 const openApiDocumentSchema = z.object({
   info: z.object({
@@ -18,13 +16,7 @@ describe('configureApplication', () => {
   let app: INestApplication<App>;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleRef.createNestApplication();
-    configureApplication(app);
-    await app.init();
+    app = await createApplication<INestApplication<App>>();
   });
 
   afterAll(async () => {
@@ -32,10 +24,15 @@ describe('configureApplication', () => {
   });
 
   it('serves the Swagger UI', async () => {
-    await request(app.getHttpServer())
+    const response = await request(app.getHttpServer())
       .get('/docs/')
       .expect('content-type', /html/)
       .expect(200);
+
+    expect(response.headers).toMatchObject({
+      'x-content-type-options': 'nosniff',
+    });
+    expect(response.headers).not.toHaveProperty('x-powered-by');
   });
 
   it('serves the OpenAPI JSON document', async () => {
