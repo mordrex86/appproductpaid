@@ -14,11 +14,13 @@ describe('validateEnvironment', () => {
       validateEnvironment({
         CORS_ORIGIN: 'https://example.com',
         NODE_ENV: 'production',
+        PAYMENTS_TABLE_NAME: 'product-payment-production',
         PORT: '8080',
       }),
     ).toEqual({
       CORS_ORIGIN: 'https://example.com',
       NODE_ENV: 'production',
+      PAYMENTS_TABLE_NAME: 'product-payment-production',
       PORT: 8080,
     });
   });
@@ -30,5 +32,13 @@ describe('validateEnvironment', () => {
         PORT: 'invalid',
       }),
     ).toThrow();
+  });
+
+  it('requires the DynamoDB table in production', () => {
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: 'production',
+      }),
+    ).toThrow('PAYMENTS_TABLE_NAME is required in production');
   });
 });

@@ -1,27 +1,22 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { Test, TestingModule } from '@nestjs/testing';
+import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
-import { AppModule } from './../src/app.module';
+import { z } from 'zod';
+import { createApplication } from './../src/create-application';
+
+const openApiDocumentSchema = z.object({
+  info: z.object({
+    title: z.string(),
+    version: z.string(),
+  }),
+  paths: z.record(z.string(), z.unknown()),
+});
 
 describe('HealthController (e2e)', () => {
   let app: INestApplication<App>;
 
   beforeEach(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    app.setGlobalPrefix('api/v1');
-    app.useGlobalPipes(
-      new ValidationPipe({
-        forbidNonWhitelisted: true,
-        transform: true,
-        whitelist: true,
-      }),
-    );
-    await app.init();
+    app = await createApplication<INestApplication<App>>();
   });
 
   it('/api/v1/health (GET)', () => {
@@ -30,6 +25,99 @@ describe('HealthController (e2e)', () => {
       .expect(200)
       .expect({
         status: 'ok',
+      });
+  });
+
+  it('/docs-json (GET)', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/docs-json')
+      .expect(200);
+    const document = openApiDocumentSchema.parse(response.body as unknown);
+
+    expect(document.info).toMatchObject({
+      title: 'Product payment API',
+      version: '1.0',
+    });
+    expect(document.paths).toHaveProperty('/api/v1/health');
+    expect(document.paths).toHaveProperty('/api/v1/products/{productId}');
+    expect(document.paths).toHaveProperty('/api/v1/transactions');
+  });
+
+  it('creates and reads a pending transaction', async () => {
+    await request(app.getHttpServer())
+      .get('/api/v1/products/wireless-headphones')
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          id: 'wireless-headphones',
+          priceInCents: 129_900,
+          stock: 12,
+        });
+      });
+
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/transactions')
+      .set('Idempotency-Key', 'checkout-attempt-0001')
+      .send({
+        productId: 'wireless-headphones',
+        quantity: 1,
+        customer: {
+          fullName: 'Ana Torres',
+          email: 'ana@example.com',
+          phone: '+573001234567',
+        },
+        delivery: {
+          addressLine: 'Carrera 7 # 80-10',
+          city: 'Bogotá',
+          region: 'Cundinamarca',
+          postalCode: '110221',
+        },
+      })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      productId: 'wireless-headphones',
+      status: 'PENDING',
+      amounts: {
+        product: 129_900,
+        baseFee: 2_000,
+        deliveryFee: 8_000,
+        total: 139_900,
+      },
+    });
+    const transactionId = z
+      .object({ id: z.string() })
+      .parse(response.body as unknown).id;
+
+    await request(app.getHttpServer())
+      .get(`/api/v1/transactions/${transactionId}`)
+      .expect(200)
+      .expect(response.body);
+  });
+
+  it('validates requests and maps expected errors', async () => {
+    await request(app.getHttpServer())
+      .get('/api/v1/products/missing')
+      .expect(404)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          code: 'PRODUCT_NOT_FOUND',
+        });
+      });
+
+    await request(app.getHttpServer())
+      .post('/api/v1/transactions')
+      .set('Idempotency-Key', 'short')
+      .send({})
+      .expect(400);
+
+    await request(app.getHttpServer())
+      .get('/api/v1/transactions/missing')
+      .expect(404)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          code: 'TRANSACTION_NOT_FOUND',
+        });
       });
   });
 

@@ -1,15 +1,19 @@
 import { Controller, Get } from '@nestjs/common';
+import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { HealthResponseDto } from './health-response.dto';
 
-interface HealthResponse {
-  readonly status: 'ok';
-}
-
+@ApiTags('health')
 @Controller('health')
 export class HealthController {
   @Get()
-  getHealth(): HealthResponse {
-    return {
-      status: 'ok',
-    };
+  @ApiOperation({
+    summary: 'Consultar la disponibilidad de la API',
+  })
+  @ApiOkResponse({
+    description: 'La API está disponible.',
+    type: HealthResponseDto,
+  })
+  getHealth(): HealthResponseDto {
+    return new HealthResponseDto();
   }
 }
