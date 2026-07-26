@@ -14,9 +14,15 @@ Parameters:
   GitHubOwner:
     Type: String
     Default: mordrex86
+  GitHubOwnerId:
+    Type: Number
+    Default: 5359839
   GitHubRepository:
     Type: String
     Default: appproductpaid
+  GitHubRepositoryId:
+    Type: Number
+    Default: 1311448212
   GitHubEnvironment:
     Type: String
     Default: production
@@ -92,7 +98,7 @@ Resources:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
                 token.actions.githubusercontent.com:sub: !Sub >-
-                  repo:${GitHubOwner}/${GitHubRepository}:environment:${GitHubEnvironment}
+                  repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepository}@${GitHubRepositoryId}:environment:${GitHubEnvironment}
       Policies:
         - PolicyName: DeployApplication
           PolicyDocument:
