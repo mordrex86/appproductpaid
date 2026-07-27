@@ -1,44 +1,117 @@
 # Product payment application
 
-Aplicación full stack para implementar un flujo de compra, pago con tarjeta,
-entrega y actualización de inventario.
+Aplicación full stack para comprar un producto, registrar la entrega, procesar
+un pago con tarjeta en Sandbox y actualizar el inventario.
 
-## Estado
+## Enlaces de entrega
 
-El repositorio contiene la base técnica del proyecto:
+- Aplicación: <https://d26xn7avlebvew.cloudfront.net>
+- Swagger UI: <https://d26xn7avlebvew.cloudfront.net/docs>
+- Health check: <https://d26xn7avlebvew.cloudfront.net/api/v1/health>
 
-- SPA con React, TypeScript, Vite y Redux Toolkit.
-- API con NestJS y TypeScript.
-- Monorepo administrado con npm workspaces.
-- Pruebas unitarias con Jest y umbral mínimo de cobertura.
-- Pipeline de integración continua.
+## Flujo
 
-Los módulos de producto, clientes, transacciones, entregas y la integración de
-pago se implementarán en incrementos posteriores.
+1. Se muestra el producto, su precio y las unidades disponibles.
+2. El cliente ingresa los datos de la tarjeta y de entrega.
+3. Se presenta el resumen con producto, tarifa de servicio, envío y total.
+4. Se crea una transacción pendiente y se procesa el pago en Sandbox.
+5. Se muestra el resultado y se regresa al producto con el inventario
+   actualizado.
 
-## Requisitos
+El avance se conserva durante una recarga del navegador. Los datos completos de
+la tarjeta, el CVC y el token de pago no se almacenan.
 
-- Node.js 24.14.0
-- npm 11
+## Tecnologías
 
-## Instalación
+| Área            | Tecnología                                 |
+| --------------- | ------------------------------------------ |
+| Frontend        | React 19, TypeScript, Vite y Redux Toolkit |
+| Backend         | NestJS 11 y TypeScript                     |
+| Base de datos   | Amazon DynamoDB                            |
+| Pagos           | Wompi Sandbox                              |
+| Infraestructura | AWS SAM y CloudFormation                   |
+| Despliegue      | S3, CloudFront, API Gateway y Lambda       |
+| Pruebas         | Jest, Testing Library y Supertest          |
 
-```bash
-npm ci
+## Arquitectura
+
+La API utiliza arquitectura hexagonal dentro de un monolito modular. El dominio
+y los casos de uso no dependen de NestJS, HTTP, DynamoDB ni del proveedor de
+pagos.
+
+```text
+Frontend React
+      |
+      v
+Controladores HTTP
+      |
+      v
+Casos de uso <---- Puertos
+      |              ^
+      v              |
+   Dominio      Adaptadores
+                |         |
+             DynamoDB   Pagos Sandbox
 ```
 
-Para la primera instalación, antes de que exista `package-lock.json`, usar
-`npm install`.
+El frontend usa Redux Toolkit para coordinar las cinco pantallas y
+`sessionStorage` para recuperar el progreso no sensible.
+
+### Modelo de datos
+
+DynamoDB utiliza una tabla por entorno con claves de partición `PK` y
+ordenamiento `SK`:
+
+| Entidad      | `PK`                  | `SK`          |
+| ------------ | --------------------- | ------------- |
+| Producto     | `PRODUCT#<id>`        | `METADATA`    |
+| Cliente      | `CUSTOMER#<id>`       | `PROFILE`     |
+| Transacción  | `TRANSACTION#<id>`    | `TRANSACTION` |
+| Entrega      | `TRANSACTION#<id>`    | `DELIVERY`    |
+| Idempotencia | `IDEMPOTENCY#<clave>` | `REQUEST`     |
+
+La creación del cliente, la entrega, la transacción y el registro de
+idempotencia se realiza de forma atómica. El inventario se reserva antes del
+pago: una aprobación confirma el descuento y un rechazo libera las unidades.
+
+Los valores de negocio son montos cerrados en pesos colombianos:
+
+- producto: 129.900 COP por unidad;
+- tarifa de servicio: 2.000 COP;
+- envío: 8.000 COP;
+- total para una unidad: 139.900 COP.
+
+## API
+
+El contrato completo, los cuerpos de solicitud y las respuestas se pueden
+probar desde [Swagger](https://d26xn7avlebvew.cloudfront.net/docs).
+
+| Método | Ruta                                                 | Descripción                              |
+| ------ | ---------------------------------------------------- | ---------------------------------------- |
+| `GET`  | `/api/v1/products/:productId`                        | Consulta producto y stock                |
+| `POST` | `/api/v1/transactions`                               | Crea una transacción pendiente           |
+| `GET`  | `/api/v1/transactions/:transactionId`                | Consulta una transacción                 |
+| `GET`  | `/api/v1/payments/config`                            | Obtiene la configuración pública de pago |
+| `POST` | `/api/v1/transactions/:transactionId/payment`        | Inicia el pago                           |
+| `POST` | `/api/v1/transactions/:transactionId/payment/status` | Sincroniza el resultado                  |
+
+La creación de transacciones requiere el encabezado `Idempotency-Key`. El
+backend obtiene el precio persistido y calcula todos los valores; el navegador
+no puede establecer montos ni estados.
 
 ## Ejecución local
 
-API:
+Requisitos:
+
+- Node.js 24;
+- npm 11.
 
 ```bash
+npm ci
 npm run dev:api
 ```
 
-Frontend:
+En otra terminal:
 
 ```bash
 npm run dev:web
@@ -47,57 +120,34 @@ npm run dev:web
 Direcciones locales:
 
 - Frontend: <http://localhost:5173>
-- Health check: <http://localhost:3000/api/v1/health>
+- API: <http://localhost:3000>
+- Swagger: <http://localhost:3000/docs>
 
-## Comandos
+Las variables locales se crean a partir de `.env.example`. La integración de
+pago debe configurarse únicamente con credenciales Sandbox.
+
+## Pruebas
 
 ```bash
-npm run format:check
-npm run lint
-npm run typecheck
-npm test
-npm run test:coverage
-npm run test:e2e
-npm run build
 npm run verify
+npm run test:e2e
 ```
 
-## Arquitectura
+Resultados de la última ejecución completa:
 
-El backend sigue puertos y adaptadores dentro de un monolito modular:
+| Proyecto | Pruebas | Statements | Branches | Functions |   Lines |
+| -------- | ------: | ---------: | -------: | --------: | ------: |
+| API      |      55 |    96,81 % |  89,02 % |   98,80 % | 96,81 % |
+| Web      |      22 |    94,94 % |  89,60 % |   90,27 % | 94,94 % |
 
-```text
-presentation -> application -> domain
-infrastructure -> application ports
-Nest modules -> composition root
-```
+La cobertura de frontend y backend supera el 80 % solicitado. También existen
+pruebas E2E de la API.
 
-El dominio no depende de NestJS, HTTP, persistencia ni servicios externos. Cada
-capacidad de negocio se agregará bajo `apps/api/src/modules` con sus propias
-capas.
+## Despliegue
 
-El frontend se organiza por funcionalidades. Los componentes presentan estado,
-Redux coordina el flujo serializable y los servicios externos se encapsulan en
-adaptadores.
+La aplicación está publicada en AWS y conectada con la API y DynamoDB:
 
-La decisión completa está en
-[`docs/adr/0001-stack-and-architecture.md`](docs/adr/0001-stack-and-architecture.md).
+<https://d26xn7avlebvew.cloudfront.net>
 
-## Variables de entorno
-
-Copiar `.env.example` como `.env` y ajustar únicamente valores locales. El
-archivo `.env` no se versiona.
-
-La base actual no requiere secretos. Las credenciales de proveedores externos
-se agregarán posteriormente mediante variables seguras.
-
-## API, base de datos y despliegue
-
-- La documentación OpenAPI se añadirá junto con los primeros contratos de
-  negocio.
-- El modelo de base de datos se documentará cuando se seleccione PostgreSQL o
-  DynamoDB.
-- Las URLs públicas se agregarán después de configurar el despliegue cloud.
-
-No se deben publicar credenciales, datos completos de tarjeta ni archivos de
-configuración local.
+El despliegue automático valida formato, tipos, pruebas, cobertura y compilación
+antes de actualizar el entorno.
