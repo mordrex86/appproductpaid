@@ -17,7 +17,7 @@ const product = {
   id: 'wireless-headphones',
   name: 'Audífonos inalámbricos',
   description: 'Descripción',
-  priceInCents: 129_900,
+  priceInCents: 12_990_000,
   stock: 12,
 };
 
@@ -28,10 +28,10 @@ const transaction = {
   quantity: 1,
   status: 'PENDING' as const,
   amounts: {
-    product: 129_900,
-    baseFee: 2_000,
-    deliveryFee: 8_000,
-    total: 139_900,
+    product: 12_990_000,
+    baseFee: 200_000,
+    deliveryFee: 800_000,
+    total: 13_990_000,
   },
   createdAt: '2026-07-26T00:00:00.000Z',
 };
@@ -77,6 +77,11 @@ describe('checkoutSlice', () => {
           postalCode: '110111',
         },
         card: { brand: 'visa', lastFour: '4242' },
+        paymentAuthorization: {
+          paymentToken: 'tok_test',
+          acceptanceToken: 'acceptance-token',
+          personalDataToken: 'personal-data-token',
+        },
         idempotencyKey: 'checkout-attempt-0001',
       }),
     );

@@ -1,7 +1,7 @@
 import {
   GetCommand,
-  PutCommand,
   TransactWriteCommand,
+  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import {
@@ -12,31 +12,22 @@ import {
   IdempotencyConflictError,
   InsufficientStockError,
 } from '../application/checkout.errors';
-import { Product, ProductSnapshot } from '../domain/product';
-import { Transaction, TransactionSnapshot } from '../domain/transaction';
-
-interface StoredProduct extends ProductSnapshot {
-  readonly PK: string;
-  readonly SK: 'METADATA';
-  readonly entityType: 'PRODUCT';
-  readonly GSI1PK: 'PRODUCTS';
-  readonly GSI1SK: string;
-}
-
-interface StoredTransaction extends TransactionSnapshot {
-  readonly PK: string;
-  readonly SK: 'TRANSACTION';
-  readonly entityType: 'TRANSACTION';
-  readonly GSI1PK: string;
-  readonly GSI1SK: string;
-}
-
-interface StoredIdempotency {
-  readonly PK: string;
-  readonly SK: 'REQUEST';
-  readonly fingerprint: string;
-  readonly transactionId: string;
-}
+import { Product } from '../domain/product';
+import { Transaction } from '../domain/transaction';
+import { TRANSACTION_STATUS } from '../domain/transaction';
+import {
+  completedPaymentItems,
+  idempotencyKey,
+  pendingCheckoutItems,
+  productKey,
+  StoredCustomer,
+  StoredDelivery,
+  StoredIdempotency,
+  StoredProduct,
+  StoredTransaction,
+  toStoredProduct,
+  transactionKey,
+} from './dynamodb-checkout.items';
 
 export class DynamoDbCheckoutRepository implements CheckoutRepository {
   constructor(
@@ -46,27 +37,35 @@ export class DynamoDbCheckoutRepository implements CheckoutRepository {
 
   async seedProduct(product: Product): Promise<void> {
     const snapshot = product.toSnapshot();
-
-    try {
-      await this.client.send(
-        new PutCommand({
-          TableName: this.tableName,
-          Item: this.toStoredProduct(snapshot),
-          ConditionExpression: 'attribute_not_exists(PK)',
-        }),
-      );
-    } catch (error) {
-      if (!this.isConditionalFailure(error)) {
-        throw error;
-      }
-    }
+    const stored = toStoredProduct(snapshot);
+    await this.client.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: { PK: stored.PK, SK: stored.SK },
+        UpdateExpression:
+          'SET id = :id, #name = :name, description = :description, ' +
+          'priceInCents = :price, stock = if_not_exists(stock, :stock), ' +
+          'entityType = :entityType, GSI1PK = :gsi1pk, GSI1SK = :gsi1sk',
+        ExpressionAttributeNames: { '#name': 'name' },
+        ExpressionAttributeValues: {
+          ':id': stored.id,
+          ':name': stored.name,
+          ':description': stored.description,
+          ':price': stored.priceInCents,
+          ':stock': stored.stock,
+          ':entityType': stored.entityType,
+          ':gsi1pk': stored.GSI1PK,
+          ':gsi1sk': stored.GSI1SK,
+        },
+      }),
+    );
   }
 
   async findProduct(id: string): Promise<Product | undefined> {
     const response = await this.client.send(
       new GetCommand({
         TableName: this.tableName,
-        Key: { PK: this.productKey(id), SK: 'METADATA' },
+        Key: { PK: productKey(id), SK: 'METADATA' },
         ConsistentRead: true,
       }),
     );
@@ -86,74 +85,10 @@ export class DynamoDbCheckoutRepository implements CheckoutRepository {
   }
 
   async createPending(checkout: PendingCheckout): Promise<Transaction> {
-    const transaction = checkout.transaction.toSnapshot();
-    const productId = checkout.product.toSnapshot().id;
-
     try {
       await this.client.send(
         new TransactWriteCommand({
-          TransactItems: [
-            {
-              ConditionCheck: {
-                TableName: this.tableName,
-                Key: { PK: this.productKey(productId), SK: 'METADATA' },
-                ConditionExpression: 'stock >= :quantity',
-                ExpressionAttributeValues: {
-                  ':quantity': transaction.quantity,
-                },
-              },
-            },
-            {
-              Put: {
-                TableName: this.tableName,
-                Item: {
-                  PK: `CUSTOMER#${checkout.customer.id}`,
-                  SK: 'PROFILE',
-                  entityType: 'CUSTOMER',
-                  ...checkout.customer,
-                  createdAt: transaction.createdAt,
-                },
-                ConditionExpression: 'attribute_not_exists(PK)',
-              },
-            },
-            {
-              Put: {
-                TableName: this.tableName,
-                Item: {
-                  PK: `TRANSACTION#${transaction.id}`,
-                  SK: 'DELIVERY',
-                  entityType: 'DELIVERY',
-                  transactionId: transaction.id,
-                  customerId: checkout.customer.id,
-                  ...checkout.delivery,
-                  status: 'PENDING',
-                  createdAt: transaction.createdAt,
-                },
-                ConditionExpression: 'attribute_not_exists(PK)',
-              },
-            },
-            {
-              Put: {
-                TableName: this.tableName,
-                Item: this.toStoredTransaction(transaction),
-                ConditionExpression: 'attribute_not_exists(PK)',
-              },
-            },
-            {
-              Put: {
-                TableName: this.tableName,
-                Item: {
-                  PK: this.idempotencyKey(checkout.idempotencyKey),
-                  SK: 'REQUEST',
-                  entityType: 'IDEMPOTENCY',
-                  fingerprint: checkout.requestFingerprint,
-                  transactionId: transaction.id,
-                  createdAt: transaction.createdAt,
-                },
-                ConditionExpression: 'attribute_not_exists(PK)',
-              },
-            },
-          ],
+          TransactItems: pendingCheckoutItems(this.tableName, checkout),
         }),
       );
       return checkout.transaction;
@@ -182,7 +117,7 @@ export class DynamoDbCheckoutRepository implements CheckoutRepository {
     const response = await this.client.send(
       new GetCommand({
         TableName: this.tableName,
-        Key: { PK: `TRANSACTION#${id}`, SK: 'TRANSACTION' },
+        Key: { PK: transactionKey(id), SK: 'TRANSACTION' },
         ConsistentRead: true,
       }),
     );
@@ -198,9 +133,100 @@ export class DynamoDbCheckoutRepository implements CheckoutRepository {
       customerId: item.customerId,
       quantity: item.quantity,
       status: item.status,
+      ...(item.providerTransactionId === undefined
+        ? {}
+        : { providerTransactionId: item.providerTransactionId }),
       amounts: item.amounts,
       createdAt: item.createdAt,
     });
+  }
+
+  async findPaymentContext(transactionId: string) {
+    const transaction = await this.findTransaction(transactionId);
+    if (transaction === undefined) return undefined;
+
+    const customerId = transaction.toSnapshot().customerId;
+    const [customerResponse, deliveryResponse] = await Promise.all([
+      this.client.send(
+        new GetCommand({
+          TableName: this.tableName,
+          Key: { PK: `CUSTOMER#${customerId}`, SK: 'PROFILE' },
+          ConsistentRead: true,
+        }),
+      ),
+      this.client.send(
+        new GetCommand({
+          TableName: this.tableName,
+          Key: { PK: transactionKey(transactionId), SK: 'DELIVERY' },
+          ConsistentRead: true,
+        }),
+      ),
+    ]);
+    if (
+      customerResponse.Item === undefined ||
+      deliveryResponse.Item === undefined
+    ) {
+      return undefined;
+    }
+
+    const customer = customerResponse.Item as StoredCustomer;
+    const delivery = deliveryResponse.Item as StoredDelivery;
+    return {
+      transaction,
+      customer: {
+        id: customer.id,
+        fullName: customer.fullName,
+        email: customer.email,
+        phone: customer.phone,
+      },
+      delivery: {
+        addressLine: delivery.addressLine,
+        city: delivery.city,
+        region: delivery.region,
+        postalCode: delivery.postalCode,
+      },
+    };
+  }
+
+  async savePaymentResult(transaction: Transaction): Promise<Transaction> {
+    const snapshot = transaction.toSnapshot();
+    if (snapshot.providerTransactionId === undefined) return transaction;
+
+    if (snapshot.status === TRANSACTION_STATUS.pending) {
+      await this.client.send(
+        new UpdateCommand({
+          TableName: this.tableName,
+          Key: { PK: transactionKey(snapshot.id), SK: 'TRANSACTION' },
+          UpdateExpression:
+            'SET providerTransactionId = :providerId, #status = :status',
+          ExpressionAttributeNames: { '#status': 'status' },
+          ExpressionAttributeValues: {
+            ':providerId': snapshot.providerTransactionId,
+            ':status': snapshot.status,
+          },
+        }),
+      );
+      return transaction;
+    }
+
+    try {
+      await this.client.send(
+        new TransactWriteCommand({
+          TransactItems: completedPaymentItems(this.tableName, snapshot),
+        }),
+      );
+      return transaction;
+    } catch (error) {
+      if (!this.isTransactionCanceled(error)) throw error;
+      const existing = await this.findTransaction(snapshot.id);
+      if (
+        existing !== undefined &&
+        existing.toSnapshot().status !== TRANSACTION_STATUS.pending
+      ) {
+        return existing;
+      }
+      throw new InsufficientStockError();
+    }
   }
 
   private async findByIdempotencyKey(
@@ -209,49 +235,11 @@ export class DynamoDbCheckoutRepository implements CheckoutRepository {
     const response = await this.client.send(
       new GetCommand({
         TableName: this.tableName,
-        Key: { PK: this.idempotencyKey(key), SK: 'REQUEST' },
+        Key: { PK: idempotencyKey(key), SK: 'REQUEST' },
         ConsistentRead: true,
       }),
     );
     return response.Item as StoredIdempotency | undefined;
-  }
-
-  private toStoredProduct(product: ProductSnapshot): StoredProduct {
-    return {
-      PK: this.productKey(product.id),
-      SK: 'METADATA',
-      entityType: 'PRODUCT',
-      GSI1PK: 'PRODUCTS',
-      GSI1SK: `${product.name}#${product.id}`,
-      ...product,
-    };
-  }
-
-  private toStoredTransaction(
-    transaction: TransactionSnapshot,
-  ): StoredTransaction {
-    return {
-      PK: `TRANSACTION#${transaction.id}`,
-      SK: 'TRANSACTION',
-      entityType: 'TRANSACTION',
-      GSI1PK: `CUSTOMER#${transaction.customerId}`,
-      GSI1SK: `${transaction.createdAt}#${transaction.id}`,
-      ...transaction,
-    };
-  }
-
-  private productKey(id: string): string {
-    return `PRODUCT#${id}`;
-  }
-
-  private idempotencyKey(key: string): string {
-    return `IDEMPOTENCY#${key}`;
-  }
-
-  private isConditionalFailure(error: unknown): boolean {
-    return (
-      error instanceof Error && error.name === 'ConditionalCheckFailedException'
-    );
   }
 
   private isTransactionCanceled(error: unknown): boolean {

@@ -41,6 +41,10 @@ describe('HealthController (e2e)', () => {
     expect(document.paths).toHaveProperty('/api/v1/health');
     expect(document.paths).toHaveProperty('/api/v1/products/{productId}');
     expect(document.paths).toHaveProperty('/api/v1/transactions');
+    expect(document.paths).toHaveProperty('/api/v1/payments/config');
+    expect(document.paths).toHaveProperty(
+      '/api/v1/transactions/{transactionId}/payment',
+    );
   });
 
   it('creates and reads a pending transaction', async () => {
@@ -50,7 +54,7 @@ describe('HealthController (e2e)', () => {
       .expect(({ body }) => {
         expect(body).toMatchObject({
           id: 'wireless-headphones',
-          priceInCents: 129_900,
+          priceInCents: 12_990_000,
           stock: 12,
         });
       });
@@ -79,10 +83,10 @@ describe('HealthController (e2e)', () => {
       productId: 'wireless-headphones',
       status: 'PENDING',
       amounts: {
-        product: 129_900,
-        baseFee: 2_000,
-        deliveryFee: 8_000,
-        total: 139_900,
+        product: 12_990_000,
+        baseFee: 200_000,
+        deliveryFee: 800_000,
+        total: 13_990_000,
       },
     });
     const transactionId = z

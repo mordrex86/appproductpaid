@@ -6,6 +6,7 @@ describe('validateEnvironment', () => {
       CORS_ORIGIN: 'http://localhost:5173',
       NODE_ENV: 'development',
       PORT: 3000,
+      WOMPI_API_URL: 'https://api-sandbox.co.uat.wompi.dev/v1',
     });
   });
 
@@ -16,12 +17,19 @@ describe('validateEnvironment', () => {
         NODE_ENV: 'production',
         PAYMENTS_TABLE_NAME: 'product-payment-production',
         PORT: '8080',
+        WOMPI_PUBLIC_KEY: 'pub_test_123',
+        WOMPI_PRIVATE_KEY: 'prv_test_123',
+        WOMPI_INTEGRITY_SECRET: 'test_integrity',
       }),
     ).toEqual({
       CORS_ORIGIN: 'https://example.com',
       NODE_ENV: 'production',
       PAYMENTS_TABLE_NAME: 'product-payment-production',
       PORT: 8080,
+      WOMPI_API_URL: 'https://api-sandbox.co.uat.wompi.dev/v1',
+      WOMPI_PUBLIC_KEY: 'pub_test_123',
+      WOMPI_PRIVATE_KEY: 'prv_test_123',
+      WOMPI_INTEGRITY_SECRET: 'test_integrity',
     });
   });
 

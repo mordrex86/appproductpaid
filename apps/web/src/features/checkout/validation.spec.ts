@@ -4,6 +4,7 @@ import {
   formatCardNumber,
   isValidCardNumber,
   isValidExpiry,
+  toColombianPhone,
   validateCheckoutForm,
 } from './validation';
 
@@ -14,7 +15,7 @@ const validForm = {
   cvc: '123',
   fullName: 'Laura Medina',
   email: 'laura@example.com',
-  phone: '+573001234567',
+  phone: '3001234567',
   addressLine: 'Calle 10 # 20-30',
   city: 'Bogotá',
   region: 'Cundinamarca',
@@ -39,6 +40,10 @@ describe('checkout validation', () => {
     expect(isValidExpiry('06/26', new Date(2026, 6, 1))).toBe(false);
     expect(isValidExpiry('13/29')).toBe(false);
     expect(isValidExpiry('invalid')).toBe(false);
+  });
+
+  it('adds the country code only when sending the phone', () => {
+    expect(toColombianPhone('300 123 4567')).toBe('+573001234567');
   });
 
   it('accepts complete data and reports every invalid field', () => {

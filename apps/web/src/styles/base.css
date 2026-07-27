@@ -1,0 +1,137 @@
+:root {
+  color-scheme: light dark;
+  font-family:
+    'Aptos', 'Segoe UI Variable', 'Segoe UI', ui-sans-serif, system-ui,
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --surface: #f3f5f4;
+  --surface-raised: #fbfcfb;
+  --surface-strong: #e7ebe8;
+  --text: #17201b;
+  --text-soft: #56615a;
+  --line: #cfd6d1;
+  --accent: #176b45;
+  --accent-hover: #105738;
+  --accent-soft: #dcece3;
+  --danger: #a32d2d;
+  --danger-soft: #f8e3e1;
+  --shadow: 0 22px 70px rgb(31 49 39 / 14%);
+  --radius-control: 12px;
+  --radius-surface: 18px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: var(--surface);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100dvh;
+  background: var(--surface);
+  color: var(--text);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button,
+select {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+button,
+a,
+input,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 3px;
+}
+
+.app-shell {
+  min-height: 100dvh;
+}
+
+.site-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  min-height: 72px;
+  gap: 32px;
+  padding: 0 40px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+}
+
+.brand {
+  color: var(--text);
+  font-size: 0.96rem;
+  font-weight: 760;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.site-header nav {
+  justify-self: center;
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  color: var(--text-soft);
+  font-size: 0.8rem;
+}
+
+.progress li {
+  position: relative;
+  padding: 26px 0 24px;
+  white-space: nowrap;
+}
+
+.progress li.is-current {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.progress li.is-current::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--accent);
+  content: '';
+}
+
+.secure-copy {
+  color: var(--text-soft);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}

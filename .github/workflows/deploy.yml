@@ -95,6 +95,9 @@ jobs:
           --parameter-overrides
           ProjectName=product-payment
           EnvironmentName=production
+          WompiPublicKey="${{ secrets.WOMPI_PUBLIC_KEY }}"
+          WompiPrivateKey="${{ secrets.WOMPI_PRIVATE_KEY }}"
+          WompiIntegritySecret="${{ secrets.WOMPI_INTEGRITY_SECRET }}"
 
       - name: Read stack outputs
         id: outputs
@@ -147,5 +150,7 @@ jobs:
             "${{ steps.outputs.outputs.api_url }}/api/v1/health"
           curl --fail --silent --show-error \
             "${{ steps.outputs.outputs.web_url }}/api/v1/health"
+          curl --fail --silent --show-error \
+            "${{ steps.outputs.outputs.web_url }}/api/v1/products/wireless-headphones"
           curl --fail --silent --show-error \
             "${{ steps.outputs.outputs.web_url }}" > /dev/null

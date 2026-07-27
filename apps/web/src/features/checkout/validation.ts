@@ -38,6 +38,10 @@ export function formatCardNumber(value: string): string {
   return cardDigits(value).replace(/(\d{4})(?=\d)/g, '$1 ');
 }
 
+export function toColombianPhone(value: string): string {
+  return `+57${value.replace(/\D/g, '')}`;
+}
+
 export function isValidCardNumber(value: string): boolean {
   const digits = cardDigits(value);
   if (digits.length !== 16 || detectCardBrand(digits) === undefined) {
@@ -91,8 +95,8 @@ export function validateCheckoutForm(values: CheckoutFormValues): FormErrors {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email)) {
     errors.email = 'Ingresa un correo válido.';
   }
-  if (!/^\+?[1-9]\d{9,14}$/.test(values.phone.replace(/\s/g, ''))) {
-    errors.phone = 'Ingresa el número con código de país.';
+  if (!/^3\d{9}$/.test(values.phone.replace(/\D/g, ''))) {
+    errors.phone = 'Ingresa un celular colombiano de 10 dígitos.';
   }
   if (values.addressLine.trim().length < 5) {
     errors.addressLine = 'Completa la dirección de entrega.';

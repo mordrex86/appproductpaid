@@ -10,7 +10,7 @@ const product = {
   id: 'wireless-headphones',
   name: 'Audífonos inalámbricos',
   description: 'Audífonos bluetooth con estuche de carga.',
-  priceInCents: 129_900,
+  priceInCents: 12_990_000,
   stock: 12,
 };
 
@@ -19,14 +19,28 @@ const transaction = {
   productId: product.id,
   customerId: 'customer-1',
   quantity: 1,
-  status: 'PENDING',
+  status: 'APPROVED',
+  providerTransactionId: 'wompi-1',
   amounts: {
-    product: 129_900,
-    baseFee: 2_000,
-    deliveryFee: 8_000,
-    total: 139_900,
+    product: 12_990_000,
+    baseFee: 200_000,
+    deliveryFee: 800_000,
+    total: 13_990_000,
   },
   createdAt: '2026-07-26T00:00:00.000Z',
+};
+
+const paymentConfiguration = {
+  publicKey: 'pub_test_123',
+  tokenizationUrl: 'https://sandbox.example/tokens/cards',
+  terms: {
+    acceptanceToken: 'acceptance-token',
+    permalink: 'https://sandbox.example/terms',
+  },
+  personalData: {
+    acceptanceToken: 'personal-data-token',
+    permalink: 'https://sandbox.example/privacy',
+  },
 };
 
 function response(body: unknown, status = 200) {
@@ -74,7 +88,7 @@ function completeForm() {
     target: { value: 'laura@example.com' },
   });
   fireEvent.change(screen.getByLabelText('Teléfono'), {
-    target: { value: '+573001234567' },
+    target: { value: '3001234567' },
   });
   fireEvent.change(screen.getByLabelText('Dirección'), {
     target: { value: 'Calle 10 # 20-30' },
@@ -88,6 +102,8 @@ function completeForm() {
   fireEvent.change(screen.getByLabelText('Código postal'), {
     target: { value: '110111' },
   });
+  fireEvent.click(screen.getByLabelText(/Acepto los/));
+  fireEvent.click(screen.getByLabelText(/Autorizo el/));
 }
 
 describe('checkout application', () => {
@@ -114,7 +130,12 @@ describe('checkout application', () => {
   it('completes the five observable stages', async () => {
     (globalThis.fetch as jest.Mock)
       .mockResolvedValueOnce(response(product))
-      .mockResolvedValueOnce(response(transaction, 201));
+      .mockResolvedValueOnce(response(paymentConfiguration))
+      .mockResolvedValueOnce(response({ data: { id: 'tok_test_123' } }))
+      .mockResolvedValueOnce(
+        response({ ...transaction, status: 'PENDING' }, 201),
+      )
+      .mockResolvedValueOnce(response(transaction));
     renderApp();
 
     await screen.findByRole('heading', { name: product.name });
@@ -122,6 +143,11 @@ describe('checkout application', () => {
     expect(
       screen.getByRole('heading', { name: 'Completa tu compra' }),
     ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Revisar compra' }),
+      ).toBeEnabled(),
+    );
 
     completeForm();
     expect(screen.getByText('VISA')).toBeInTheDocument();
@@ -135,7 +161,7 @@ describe('checkout application', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar pago' }));
     expect(
       await screen.findByRole('heading', {
-        name: 'Recibimos tu solicitud',
+        name: 'Tu compra fue aprobada',
       }),
     ).toBeInTheDocument();
     expect(screen.getByText('transaction-1')).toBeInTheDocument();
@@ -147,11 +173,18 @@ describe('checkout application', () => {
   });
 
   it('shows form validation and allows returning to the product', async () => {
-    (globalThis.fetch as jest.Mock).mockResolvedValue(response(product));
+    (globalThis.fetch as jest.Mock)
+      .mockResolvedValueOnce(response(product))
+      .mockResolvedValueOnce(response(paymentConfiguration));
     renderApp();
 
     await screen.findByRole('heading', { name: product.name });
     fireEvent.click(screen.getByRole('button', { name: 'Pagar con tarjeta' }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Revisar compra' }),
+      ).toBeEnabled(),
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Revisar compra' }));
 
     expect(

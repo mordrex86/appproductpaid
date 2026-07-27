@@ -6,9 +6,14 @@ import { CHECKOUT_REPOSITORY } from './application/checkout.repository';
 import { CreatePendingTransactionUseCase } from './application/create-pending-transaction.use-case';
 import { GetProductUseCase } from './application/get-product.use-case';
 import { GetTransactionUseCase } from './application/get-transaction.use-case';
+import { GetPaymentConfigurationUseCase } from './application/get-payment-configuration.use-case';
+import { PAYMENT_GATEWAY } from './application/payment.gateway';
+import { StartPaymentUseCase } from './application/start-payment.use-case';
+import { SyncPaymentUseCase } from './application/sync-payment.use-case';
 import { CatalogSeedService } from './infrastructure/catalog-seed.service';
 import { DynamoDbCheckoutRepository } from './infrastructure/dynamodb-checkout.repository';
 import { InMemoryCheckoutRepository } from './infrastructure/in-memory-checkout.repository';
+import { WompiPaymentGateway } from './infrastructure/wompi-payment.gateway';
 import { CheckoutController } from './interfaces/http/checkout.controller';
 
 @Module({
@@ -31,10 +36,24 @@ import { CheckoutController } from './interfaces/http/checkout.controller';
         return new DynamoDbCheckoutRepository(client, tableName);
       },
     },
+    {
+      provide: PAYMENT_GATEWAY,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        new WompiPaymentGateway(
+          config.getOrThrow<string>('WOMPI_API_URL'),
+          config.get<string>('WOMPI_PUBLIC_KEY'),
+          config.get<string>('WOMPI_PRIVATE_KEY'),
+          config.get<string>('WOMPI_INTEGRITY_SECRET'),
+        ),
+    },
     CatalogSeedService,
     CreatePendingTransactionUseCase,
+    GetPaymentConfigurationUseCase,
     GetProductUseCase,
     GetTransactionUseCase,
+    StartPaymentUseCase,
+    SyncPaymentUseCase,
   ],
 })
 export class CheckoutModule {}

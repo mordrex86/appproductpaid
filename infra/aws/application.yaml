@@ -12,6 +12,18 @@ Parameters:
     Default: production
     AllowedValues:
       - production
+  WompiApiUrl:
+    Type: String
+    Default: https://api-sandbox.co.uat.wompi.dev/v1
+  WompiPublicKey:
+    Type: String
+    NoEcho: true
+  WompiPrivateKey:
+    Type: String
+    NoEcho: true
+  WompiIntegritySecret:
+    Type: String
+    NoEcho: true
 
 Globals:
   Function:
@@ -114,6 +126,10 @@ Resources:
       Environment:
         Variables:
           PAYMENTS_TABLE_NAME: !Ref PaymentsTable
+          WOMPI_API_URL: !Ref WompiApiUrl
+          WOMPI_PUBLIC_KEY: !Ref WompiPublicKey
+          WOMPI_PRIVATE_KEY: !Ref WompiPrivateKey
+          WOMPI_INTEGRITY_SECRET: !Ref WompiIntegritySecret
       Events:
         Root:
           Type: HttpApi
@@ -215,7 +231,8 @@ Resources:
           ContentSecurityPolicy:
             ContentSecurityPolicy: >-
               default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline';
-              script-src 'self'; connect-src 'self'; object-src 'none';
+              script-src 'self'; connect-src 'self' https://api-sandbox.co.uat.wompi.dev;
+              object-src 'none';
               base-uri 'self'; frame-ancestors 'none'
             Override: true
           ContentTypeOptions:

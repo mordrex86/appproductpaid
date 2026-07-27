@@ -21,3 +21,15 @@ export class IdempotencyConflictError extends Error {
     super('The idempotency key was already used with another request');
   }
 }
+
+export class PaymentConfigurationError extends Error {
+  constructor() {
+    super('Payment service is not configured');
+  }
+}
+
+export class PaymentProviderError extends Error {
+  constructor(message = 'The payment service could not complete the request') {
+    super(message);
+  }
+}

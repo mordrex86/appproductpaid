@@ -21,10 +21,14 @@ export function loadCheckoutState(): CheckoutState {
 
     const value = JSON.parse(raw) as Partial<CheckoutState>;
     if (!isCheckoutStep(value.step)) return initialState;
+    const restoredStep = value.step;
+    const { paymentAuthorization, ...safeValue } = value;
+    void paymentAuthorization;
 
     return {
       ...initialState,
-      ...value,
+      ...safeValue,
+      step: restoredStep === 'summary' ? 'payment-and-delivery' : restoredStep,
       productStatus: 'idle',
       transactionStatus: 'idle',
     };

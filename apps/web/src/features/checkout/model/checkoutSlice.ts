@@ -39,12 +39,19 @@ export interface CardSummary {
   readonly lastFour: string;
 }
 
+export interface PaymentAuthorization {
+  readonly paymentToken: string;
+  readonly acceptanceToken: string;
+  readonly personalDataToken: string;
+}
+
 export interface Transaction {
   readonly id: string;
   readonly productId: string;
   readonly customerId: string;
   readonly quantity: number;
   readonly status: 'PENDING' | 'APPROVED' | 'DECLINED' | 'ERROR';
+  readonly providerTransactionId?: string;
   readonly amounts: {
     readonly product: number;
     readonly baseFee: number;
@@ -63,6 +70,7 @@ export interface CheckoutState {
   readonly customer?: Customer;
   readonly delivery?: Delivery;
   readonly card?: CardSummary;
+  readonly paymentAuthorization?: PaymentAuthorization;
   readonly idempotencyKey?: string;
   readonly transaction?: Transaction;
   readonly transactionStatus: AsyncStatus;
@@ -105,12 +113,14 @@ const checkoutSlice = createSlice({
         customer: Customer;
         delivery: Delivery;
         card: CardSummary;
+        paymentAuthorization: PaymentAuthorization;
         idempotencyKey: string;
       }>,
     ) => {
       state.customer = action.payload.customer;
       state.delivery = action.payload.delivery;
       state.card = action.payload.card;
+      state.paymentAuthorization = action.payload.paymentAuthorization;
       state.idempotencyKey = action.payload.idempotencyKey;
       state.step = 'summary';
     },
@@ -120,6 +130,13 @@ const checkoutSlice = createSlice({
     },
     transactionSucceeded: (state, action: PayloadAction<Transaction>) => {
       state.transaction = action.payload;
+      if (
+        action.payload.status === 'APPROVED' &&
+        state.product !== undefined &&
+        state.transaction?.status !== 'APPROVED'
+      ) {
+        state.product.stock -= action.payload.quantity;
+      }
       state.transactionStatus = 'succeeded';
       state.step = 'result';
     },

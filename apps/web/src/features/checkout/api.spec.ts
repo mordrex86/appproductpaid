@@ -1,4 +1,11 @@
-import { createTransaction, getProduct } from './api';
+import {
+  createTransaction,
+  getPaymentConfiguration,
+  getProduct,
+  startPayment,
+  syncPayment,
+  tokenizeCard,
+} from './api';
 
 function response(body: unknown, status = 200): Response {
   return {
@@ -18,7 +25,7 @@ describe('checkout API', () => {
       id: 'wireless-headphones',
       name: 'Audífonos',
       description: 'Descripción',
-      priceInCents: 129_900,
+      priceInCents: 12_990_000,
       stock: 12,
     };
     jest.spyOn(globalThis, 'fetch').mockResolvedValueOnce(response(product));
@@ -76,6 +83,73 @@ describe('checkout API', () => {
     await expect(getProduct()).rejects.toThrow('Sin stock');
     await expect(getProduct()).rejects.toThrow(
       'No fue posible completar la solicitud.',
+    );
+  });
+
+  it('tokenizes the card without sending it to the application API', async () => {
+    jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(response({ data: { id: 'tok_test_123' } }));
+
+    await expect(
+      tokenizeCard(
+        {
+          publicKey: 'pub_test_123',
+          tokenizationUrl: 'https://sandbox.example/tokens/cards',
+          terms: {
+            acceptanceToken: 'acceptance-token',
+            permalink: 'https://sandbox.example/terms',
+          },
+          personalData: {
+            acceptanceToken: 'personal-token',
+            permalink: 'https://sandbox.example/privacy',
+          },
+        },
+        {
+          number: '4242 4242 4242 4242',
+          cardholder: 'Laura Medina',
+          expiry: '12/29',
+          cvc: '123',
+        },
+      ),
+    ).resolves.toBe('tok_test_123');
+    expect(fetch).toHaveBeenCalledWith(
+      'https://sandbox.example/tokens/cards',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer pub_test_123',
+        }),
+      }),
+    );
+  });
+
+  it('loads payment configuration, starts and synchronizes a payment', async () => {
+    const configuration = { publicKey: 'pub_test_123' };
+    const transaction = { id: 'transaction-1', status: 'PENDING' };
+    jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(response(configuration))
+      .mockResolvedValueOnce(response(transaction))
+      .mockResolvedValueOnce(response(transaction));
+
+    await expect(getPaymentConfiguration()).resolves.toEqual(configuration);
+    await startPayment('transaction-1', {
+      paymentToken: 'tok_test_123',
+      acceptanceToken: 'acceptance-token',
+      personalDataToken: 'personal-token',
+    });
+    await syncPayment('transaction-1');
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      '/api/v1/transactions/transaction-1/payment',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      3,
+      '/api/v1/transactions/transaction-1/payment/status',
+      expect.objectContaining({ method: 'POST' }),
     );
   });
 });

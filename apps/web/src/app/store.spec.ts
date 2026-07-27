@@ -30,7 +30,7 @@ describe('checkout persistence', () => {
     const { loadCheckoutState } = await import('./store');
 
     expect(loadCheckoutState()).toMatchObject({
-      step: 'summary',
+      step: 'payment-and-delivery',
       quantity: 2,
       card: { brand: 'visa', lastFour: '4242' },
       productStatus: 'idle',
