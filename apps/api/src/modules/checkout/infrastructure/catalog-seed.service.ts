@@ -19,7 +19,7 @@ export class CatalogSeedService implements OnApplicationBootstrap {
         name: 'Audífonos inalámbricos',
         description:
           'Audífonos bluetooth con estuche de carga y autonomía extendida.',
-        priceInCents: 129_900,
+        priceInCents: 12_990_000,
         stock: 12,
       }),
     );

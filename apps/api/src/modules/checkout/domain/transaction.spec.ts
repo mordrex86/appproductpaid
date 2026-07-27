@@ -19,9 +19,9 @@ describe('Transaction', () => {
       status: TRANSACTION_STATUS.pending,
       amounts: {
         product: 20_000,
-        baseFee: 2_000,
-        deliveryFee: 8_000,
-        total: 30_000,
+        baseFee: 200_000,
+        deliveryFee: 800_000,
+        total: 1_020_000,
       },
       createdAt: '2026-07-24T00:00:00.000Z',
     });
@@ -36,15 +36,15 @@ describe('Transaction', () => {
       status: TRANSACTION_STATUS.approved,
       amounts: {
         product: 10_000,
-        baseFee: 2_000,
-        deliveryFee: 8_000,
-        total: 20_000,
+        baseFee: 200_000,
+        deliveryFee: 800_000,
+        total: 1_010_000,
       },
       createdAt: '2026-07-24T00:00:00.000Z',
     });
     const snapshot = transaction.toSnapshot();
     (snapshot.amounts as { total: number }).total = 0;
 
-    expect(transaction.toSnapshot().amounts.total).toBe(20_000);
+    expect(transaction.toSnapshot().amounts.total).toBe(1_010_000);
   });
 });

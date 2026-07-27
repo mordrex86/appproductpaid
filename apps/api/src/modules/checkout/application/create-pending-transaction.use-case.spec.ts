@@ -51,9 +51,9 @@ describe('CreatePendingTransactionUseCase', () => {
       status: 'PENDING',
       amounts: {
         product: 20_000,
-        baseFee: 2_000,
-        deliveryFee: 8_000,
-        total: 30_000,
+        baseFee: 200_000,
+        deliveryFee: 800_000,
+        total: 1_020_000,
       },
     });
   });

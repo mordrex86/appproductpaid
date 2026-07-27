@@ -6,6 +6,7 @@ import {
   IsPhoneNumber,
   IsString,
   Length,
+  Matches,
   Max,
   Min,
   ValidateNested,
@@ -72,4 +73,22 @@ export class CreatePendingTransactionDto {
   @ValidateNested()
   @Type(() => DeliveryDto)
   delivery!: DeliveryDto;
+}
+
+export class StartPaymentDto {
+  @ApiProperty({ description: 'Token de tarjeta generado por Wompi' })
+  @IsString()
+  @Length(8, 180)
+  @Matches(/^[a-zA-Z0-9_-]+$/)
+  paymentToken!: string;
+
+  @ApiProperty({ description: 'Token de aceptación de términos' })
+  @IsString()
+  @Length(8, 2_000)
+  acceptanceToken!: string;
+
+  @ApiProperty({ description: 'Token de autorización de datos personales' })
+  @IsString()
+  @Length(8, 2_000)
+  personalDataToken!: string;
 }

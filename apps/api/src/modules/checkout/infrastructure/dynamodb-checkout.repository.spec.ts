@@ -52,15 +52,8 @@ describe('DynamoDbCheckoutRepository', () => {
     send.mockReset();
   });
 
-  it('seeds only when the product does not exist', async () => {
+  it('updates catalog data without resetting existing stock', async () => {
     send.mockResolvedValueOnce({});
-    await expect(repository.seedProduct(product)).resolves.toBeUndefined();
-
-    send.mockRejectedValueOnce(
-      Object.assign(new Error('exists'), {
-        name: 'ConditionalCheckFailedException',
-      }),
-    );
     await expect(repository.seedProduct(product)).resolves.toBeUndefined();
 
     send.mockRejectedValueOnce(new Error('unavailable'));
@@ -176,5 +169,40 @@ describe('DynamoDbCheckoutRepository', () => {
     await expect(repository.createPending(checkout)).rejects.toThrow(
       'unavailable',
     );
+  });
+
+  it('loads customer and delivery data needed by the payment provider', async () => {
+    send
+      .mockResolvedValueOnce({
+        Item: {
+          PK: 'TRANSACTION#transaction-1',
+          SK: 'TRANSACTION',
+          ...transaction.toSnapshot(),
+        },
+      })
+      .mockResolvedValueOnce({ Item: checkout.customer })
+      .mockResolvedValueOnce({ Item: checkout.delivery });
+
+    await expect(
+      repository.findPaymentContext('transaction-1'),
+    ).resolves.toMatchObject({
+      customer: checkout.customer,
+      delivery: checkout.delivery,
+    });
+  });
+
+  it('persists pending and approved payment results', async () => {
+    const pending = transaction.withPayment('wompi-1', 'PENDING');
+    send.mockResolvedValueOnce({});
+    await expect(repository.savePaymentResult(pending)).resolves.toEqual(
+      pending,
+    );
+
+    const approved = transaction.withPayment('wompi-1', 'APPROVED');
+    send.mockResolvedValueOnce({});
+    await expect(repository.savePaymentResult(approved)).resolves.toEqual(
+      approved,
+    );
+    expect(send).toHaveBeenCalledTimes(2);
   });
 });

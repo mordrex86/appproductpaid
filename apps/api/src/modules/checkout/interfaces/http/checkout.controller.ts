@@ -9,6 +9,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import {
   ApiConflictResponse,
@@ -22,13 +23,18 @@ import {
 import { GetProductUseCase } from '../../application/get-product.use-case';
 import { GetTransactionUseCase } from '../../application/get-transaction.use-case';
 import { CreatePendingTransactionUseCase } from '../../application/create-pending-transaction.use-case';
+import { GetPaymentConfigurationUseCase } from '../../application/get-payment-configuration.use-case';
+import { StartPaymentUseCase } from '../../application/start-payment.use-case';
+import { SyncPaymentUseCase } from '../../application/sync-payment.use-case';
 import {
   IdempotencyConflictError,
   InsufficientStockError,
   ProductNotFoundError,
+  PaymentConfigurationError,
+  PaymentProviderError,
   TransactionNotFoundError,
 } from '../../application/checkout.errors';
-import { CreatePendingTransactionDto } from './checkout.dto';
+import { CreatePendingTransactionDto, StartPaymentDto } from './checkout.dto';
 
 @ApiTags('checkout')
 @Controller()
@@ -40,6 +46,12 @@ export class CheckoutController {
     private readonly createPendingTransaction: CreatePendingTransactionUseCase,
     @Inject(GetTransactionUseCase)
     private readonly getTransaction: GetTransactionUseCase,
+    @Inject(GetPaymentConfigurationUseCase)
+    private readonly getPaymentConfiguration: GetPaymentConfigurationUseCase,
+    @Inject(StartPaymentUseCase)
+    private readonly startPayment: StartPaymentUseCase,
+    @Inject(SyncPaymentUseCase)
+    private readonly syncPayment: SyncPaymentUseCase,
   ) {}
 
   @Get('products/:productId')
@@ -135,5 +147,75 @@ export class CheckoutController {
       }
       throw error;
     }
+  }
+
+  @Get('payments/config')
+  @ApiOperation({
+    summary: 'Consultar configuración pública y contratos de pago',
+  })
+  @ApiOkResponse({ description: 'Configuración Sandbox disponible.' })
+  async paymentConfiguration() {
+    try {
+      return await this.getPaymentConfiguration.execute();
+    } catch (error) {
+      this.rethrowPaymentError(error);
+    }
+  }
+
+  @Post('transactions/:transactionId/payment')
+  @ApiOperation({ summary: 'Iniciar el pago de una transacción pendiente' })
+  @ApiOkResponse({ description: 'Pago enviado al proveedor.' })
+  async pay(
+    @Param('transactionId') transactionId: string,
+    @Body() body: StartPaymentDto,
+  ) {
+    try {
+      return await this.startPayment.execute({
+        transactionId,
+        paymentToken: body.paymentToken,
+        acceptanceToken: body.acceptanceToken,
+        personalDataToken: body.personalDataToken,
+      });
+    } catch (error) {
+      this.rethrowPaymentError(error);
+    }
+  }
+
+  @Post('transactions/:transactionId/payment/status')
+  @ApiOperation({
+    summary: 'Sincronizar el estado del pago y actualizar inventario',
+  })
+  @ApiOkResponse({ description: 'Estado del pago sincronizado.' })
+  async sync(@Param('transactionId') transactionId: string) {
+    try {
+      return await this.syncPayment.execute(transactionId);
+    } catch (error) {
+      this.rethrowPaymentError(error);
+    }
+  }
+
+  private rethrowPaymentError(error: unknown): never {
+    if (error instanceof TransactionNotFoundError) {
+      throw new NotFoundException({
+        code: 'TRANSACTION_NOT_FOUND',
+        message: error.message,
+      });
+    }
+    if (
+      error instanceof PaymentConfigurationError ||
+      error instanceof PaymentProviderError
+    ) {
+      throw new ServiceUnavailableException({
+        code: 'PAYMENT_SERVICE_UNAVAILABLE',
+        message: error.message,
+      });
+    }
+    if (error instanceof InsufficientStockError) {
+      throw new ConflictException({
+        code: 'INSUFFICIENT_STOCK',
+        message: error.message,
+      });
+    }
+    throw error;
   }
 }

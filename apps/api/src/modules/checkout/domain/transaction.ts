@@ -21,12 +21,13 @@ export interface TransactionSnapshot {
   readonly customerId: string;
   readonly quantity: number;
   readonly status: TransactionStatus;
+  readonly providerTransactionId?: string;
   readonly amounts: TransactionAmounts;
   readonly createdAt: string;
 }
 
-const BASE_FEE_IN_CENTS = 2_000;
-const DELIVERY_FEE_IN_CENTS = 8_000;
+const BASE_FEE_IN_CENTS = 200_000;
+const DELIVERY_FEE_IN_CENTS = 800_000;
 
 export class Transaction {
   private constructor(private readonly state: TransactionSnapshot) {}
@@ -61,6 +62,17 @@ export class Transaction {
     return new Transaction({
       ...state,
       amounts: { ...state.amounts },
+    });
+  }
+
+  withPayment(
+    providerTransactionId: string,
+    status: TransactionStatus,
+  ): Transaction {
+    return Transaction.restore({
+      ...this.state,
+      providerTransactionId,
+      status,
     });
   }
 

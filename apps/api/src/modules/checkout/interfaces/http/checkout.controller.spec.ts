@@ -2,17 +2,23 @@ import {
   BadRequestException,
   ConflictException,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { SELF_DECLARED_DEPS_METADATA } from '@nestjs/common/constants';
 import {
   IdempotencyConflictError,
   InsufficientStockError,
+  PaymentConfigurationError,
+  PaymentProviderError,
   ProductNotFoundError,
   TransactionNotFoundError,
 } from '../../application/checkout.errors';
 import { CreatePendingTransactionUseCase } from '../../application/create-pending-transaction.use-case';
 import { GetProductUseCase } from '../../application/get-product.use-case';
 import { GetTransactionUseCase } from '../../application/get-transaction.use-case';
+import { GetPaymentConfigurationUseCase } from '../../application/get-payment-configuration.use-case';
+import { StartPaymentUseCase } from '../../application/start-payment.use-case';
+import { SyncPaymentUseCase } from '../../application/sync-payment.use-case';
 import type { CreatePendingTransactionDto } from './checkout.dto';
 import { CheckoutController } from './checkout.controller';
 
@@ -26,10 +32,16 @@ describe('CheckoutController', () => {
   const getTransaction = {
     execute: jest.fn(),
   };
+  const getPaymentConfiguration = { execute: jest.fn() };
+  const startPayment = { execute: jest.fn() };
+  const syncPayment = { execute: jest.fn() };
   const controller = new CheckoutController(
     getProduct as unknown as GetProductUseCase,
     createPending as unknown as CreatePendingTransactionUseCase,
     getTransaction as unknown as GetTransactionUseCase,
+    getPaymentConfiguration as unknown as GetPaymentConfigurationUseCase,
+    startPayment as unknown as StartPaymentUseCase,
+    syncPayment as unknown as SyncPaymentUseCase,
   );
   const body: CreatePendingTransactionDto = {
     productId: 'product-1',
@@ -55,6 +67,9 @@ describe('CheckoutController', () => {
         { index: 0, param: GetProductUseCase },
         { index: 1, param: CreatePendingTransactionUseCase },
         { index: 2, param: GetTransactionUseCase },
+        { index: 3, param: GetPaymentConfigurationUseCase },
+        { index: 4, param: StartPaymentUseCase },
+        { index: 5, param: SyncPaymentUseCase },
       ]),
     );
   });
@@ -81,6 +96,44 @@ describe('CheckoutController', () => {
     await expect(
       controller.createTransaction('checkout-attempt-0001', body),
     ).resolves.toEqual({ id: 'transaction-1' });
+  });
+
+  it('gets payment configuration, starts and synchronizes payments', async () => {
+    getPaymentConfiguration.execute.mockResolvedValueOnce({
+      publicKey: 'pub_test',
+    });
+    startPayment.execute.mockResolvedValueOnce({ status: 'PENDING' });
+    syncPayment.execute.mockResolvedValueOnce({ status: 'APPROVED' });
+
+    await expect(controller.paymentConfiguration()).resolves.toEqual({
+      publicKey: 'pub_test',
+    });
+    await expect(
+      controller.pay('transaction-1', {
+        paymentToken: 'tok_test_123',
+        acceptanceToken: 'acceptance-token',
+        personalDataToken: 'personal-token',
+      }),
+    ).resolves.toEqual({ status: 'PENDING' });
+    await expect(controller.sync('transaction-1')).resolves.toEqual({
+      status: 'APPROVED',
+    });
+  });
+
+  it.each([
+    [new TransactionNotFoundError(), NotFoundException],
+    [new PaymentConfigurationError(), ServiceUnavailableException],
+    [new PaymentProviderError(), ServiceUnavailableException],
+    [new InsufficientStockError(), ConflictException],
+  ])('maps expected payment errors', async (error, expected) => {
+    startPayment.execute.mockRejectedValueOnce(error);
+    await expect(
+      controller.pay('transaction-1', {
+        paymentToken: 'tok_test_123',
+        acceptanceToken: 'acceptance-token',
+        personalDataToken: 'personal-token',
+      }),
+    ).rejects.toBeInstanceOf(expected);
   });
 
   it('rejects missing or malformed idempotency keys', async () => {
