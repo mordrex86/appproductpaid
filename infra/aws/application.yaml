@@ -155,6 +155,7 @@ Resources:
           - '@nestjs/microservices/microservices-module'
           - '@nestjs/websockets/socket-module'
           - class-transformer/storage
+          - swagger-ui-dist/absolute-path.js
         Format: cjs
         Minify: true
         Sourcemap: false
