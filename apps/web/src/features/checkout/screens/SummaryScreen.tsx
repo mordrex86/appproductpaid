@@ -51,8 +51,8 @@ export function SummaryScreen({
         </button>
         <h1 id="summary-title">Revisa antes de pagar</h1>
         <p className="summary-intro">
-          El backend volverá a calcular todos los valores antes de crear la
-          transacción.
+          Verifica tus datos y el total. Al confirmar, procesaremos el pago de
+          forma segura.
         </p>
 
         <div className="summary-product">
@@ -82,12 +82,13 @@ export function SummaryScreen({
             </address>
           </section>
           <section>
-            <h2>Pago</h2>
+            <h2>Pago y contacto</h2>
             <p>
               {card.brand === 'visa' ? 'Visa' : 'Mastercard'} terminada en{' '}
               {card.lastFour}
             </p>
             <p>{customer.email}</p>
+            <p>{customer.phone}</p>
           </section>
         </div>
       </section>
@@ -126,7 +127,7 @@ export function SummaryScreen({
           disabled={checkout.transactionStatus === 'loading'}
         >
           {checkout.transactionStatus === 'loading'
-            ? 'Creando transacción...'
+            ? 'Procesando pago...'
             : 'Confirmar pago'}
         </button>
       </aside>

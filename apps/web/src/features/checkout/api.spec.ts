@@ -124,6 +124,39 @@ describe('checkout API', () => {
     );
   });
 
+  it('does not expose payment provider errors to the customer', async () => {
+    jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        response({ error: { reason: 'Invalid private key' } }, 401),
+      );
+
+    await expect(
+      tokenizeCard(
+        {
+          publicKey: 'pub_test_123',
+          tokenizationUrl: 'https://sandbox.example/tokens/cards',
+          terms: {
+            acceptanceToken: 'acceptance-token',
+            permalink: 'https://sandbox.example/terms',
+          },
+          personalData: {
+            acceptanceToken: 'personal-token',
+            permalink: 'https://sandbox.example/privacy',
+          },
+        },
+        {
+          number: '4242424242424242',
+          cardholder: 'Laura Medina',
+          expiry: '12/29',
+          cvc: '123',
+        },
+      ),
+    ).rejects.toThrow(
+      'No pudimos validar la tarjeta. Revisa los datos e intenta de nuevo.',
+    );
+  });
+
   it('loads payment configuration, starts and synchronizes a payment', async () => {
     const configuration = { publicKey: 'pub_test_123' };
     const transaction = { id: 'transaction-1', status: 'PENDING' };
