@@ -106,7 +106,7 @@ export async function tokenizeCard(
     { data?: { id?: string }; error?: { reason?: string } } | undefined;
   if (!response.ok || body?.data?.id === undefined) {
     throw new Error(
-      body?.error?.reason ?? 'No fue posible validar la tarjeta.',
+      'No pudimos validar la tarjeta. Revisa los datos e intenta de nuevo.',
     );
   }
   return body.data.id;

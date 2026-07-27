@@ -157,12 +157,19 @@ describe('checkout application', () => {
       await screen.findByRole('heading', { name: 'Revisa antes de pagar' }),
     ).toBeInTheDocument();
     expect(screen.getByText('Visa terminada en 4242')).toBeInTheDocument();
+    expect(screen.getByText('+573001234567')).toBeInTheDocument();
+    expect(screen.queryByText(/backend/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar pago' }));
     expect(
       await screen.findByRole('heading', {
         name: 'Tu compra fue aprobada',
       }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Tu pedido quedó confirmado y será preparado para la entrega.',
+      ),
     ).toBeInTheDocument();
     expect(screen.getByText('transaction-1')).toBeInTheDocument();
 
@@ -240,7 +247,7 @@ describe('checkout application', () => {
     renderApp({ ...initialState, step: 'result' });
 
     expect(
-      screen.getByRole('heading', { name: 'No encontramos la transacción' }),
+      screen.getByRole('heading', { name: 'No encontramos tu compra' }),
     ).toBeInTheDocument();
   });
 });

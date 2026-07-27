@@ -19,7 +19,7 @@ export function CardFields({
     <fieldset>
       <legend>Tarjeta</legend>
       <p className="field-note">
-        Usa únicamente datos de prueba del entorno Sandbox.
+        Esta es una compra de prueba. No se realizará ningún cobro real.
       </p>
 
       <div className="field full-field">

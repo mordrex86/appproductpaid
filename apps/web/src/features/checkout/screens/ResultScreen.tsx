@@ -16,8 +16,8 @@ export function ResultScreen({
   if (transaction === undefined) {
     return (
       <main className="message-layout">
-        <h1>No encontramos la transacción</h1>
-        <p>Puedes volver al producto e iniciar nuevamente.</p>
+        <h1>No encontramos tu compra</h1>
+        <p>Puedes volver a la tienda e intentarlo nuevamente.</p>
         <button
           className="primary-button"
           type="button"
@@ -32,17 +32,17 @@ export function ResultScreen({
   const copy = {
     PENDING: {
       mark: 'P',
-      status: 'Transacción pendiente',
+      status: 'Pago pendiente',
       title: 'Estamos confirmando tu pago',
       description:
-        'El proveedor todavía está procesando la transacción. Puedes consultar nuevamente.',
+        'La confirmación puede tardar unos segundos. Puedes consultar nuevamente.',
     },
     APPROVED: {
       mark: 'A',
       status: 'Pago aprobado',
       title: 'Tu compra fue aprobada',
       description:
-        'La entrega quedó registrada y el inventario fue actualizado.',
+        'Tu pedido quedó confirmado y será preparado para la entrega.',
     },
     DECLINED: {
       mark: 'R',
@@ -74,7 +74,7 @@ export function ResultScreen({
           <dd>{transaction.id}</dd>
         </div>
         <div>
-          <dt>Total calculado</dt>
+          <dt>Total</dt>
           <dd>{formatMoney(transaction.amounts.total)}</dd>
         </div>
       </dl>

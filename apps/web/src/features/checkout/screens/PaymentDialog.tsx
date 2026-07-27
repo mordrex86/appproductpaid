@@ -175,7 +175,7 @@ export function PaymentDialog({
 
         <div className="dialog-actions">
           <div>
-            <p>La tarjeta y el CVC no se guardan en este dispositivo.</p>
+            <p>Los datos de la tarjeta no se guardan en este dispositivo.</p>
             {paymentError !== undefined && (
               <p className="request-error" role="alert">
                 {paymentError}
