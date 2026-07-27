@@ -153,4 +153,13 @@ jobs:
           curl --fail --silent --show-error \
             "${{ steps.outputs.outputs.web_url }}/api/v1/products/wireless-headphones"
           curl --fail --silent --show-error \
+            "${{ steps.outputs.outputs.web_url }}/docs" > /dev/null
+          docs_content_type=$(curl --fail --silent --show-error \
+            --output /dev/null --write-out "%{content_type}" \
+            "${{ steps.outputs.outputs.web_url }}/docs/swagger-ui-bundle.js")
+          case "$docs_content_type" in
+            application/javascript*) ;;
+            *) echo "Unexpected Swagger asset content type: $docs_content_type"; exit 1 ;;
+          esac
+          curl --fail --silent --show-error \
             "${{ steps.outputs.outputs.web_url }}" > /dev/null
