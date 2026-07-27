@@ -129,7 +129,6 @@ const checkoutSlice = createSlice({
       delete state.transactionError;
     },
     transactionSucceeded: (state, action: PayloadAction<Transaction>) => {
-      state.transaction = action.payload;
       if (
         action.payload.status === 'APPROVED' &&
         state.product !== undefined &&
@@ -137,6 +136,7 @@ const checkoutSlice = createSlice({
       ) {
         state.product.stock -= action.payload.quantity;
       }
+      state.transaction = action.payload;
       state.transactionStatus = 'succeeded';
       state.step = 'result';
     },

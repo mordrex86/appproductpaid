@@ -177,6 +177,7 @@ describe('checkout application', () => {
     expect(
       screen.getByRole('heading', { name: product.name }),
     ).toBeInTheDocument();
+    expect(screen.getByText('11 unidades disponibles')).toBeInTheDocument();
   });
 
   it('shows form validation and allows returning to the product', async () => {

@@ -128,5 +128,10 @@ describe('WompiPaymentGateway', () => {
     await expect(gateway.getPayment('wompi-1')).rejects.toBeInstanceOf(
       PaymentProviderError,
     );
+
+    request.mockRejectedValueOnce(new TypeError('network unavailable'));
+    await expect(gateway.getPayment('wompi-1')).rejects.toBeInstanceOf(
+      PaymentProviderError,
+    );
   });
 });

@@ -45,6 +45,61 @@ describe('HealthController (e2e)', () => {
     expect(document.paths).toHaveProperty(
       '/api/v1/transactions/{transactionId}/payment',
     );
+
+    const productOperation = z
+      .object({
+        parameters: z.array(
+          z.object({
+            name: z.string(),
+            in: z.string(),
+            required: z.boolean(),
+          }),
+        ),
+        responses: z.record(
+          z.string(),
+          z.object({
+            content: z
+              .record(
+                z.string(),
+                z.object({ schema: z.object({ $ref: z.string() }) }),
+              )
+              .optional(),
+          }),
+        ),
+      })
+      .parse(
+        z
+          .object({ get: z.unknown() })
+          .parse(document.paths['/api/v1/products/{productId}']).get,
+      );
+    expect(productOperation.parameters).toContainEqual(
+      expect.objectContaining({
+        name: 'productId',
+        in: 'path',
+        required: true,
+      }),
+    );
+    expect(productOperation.responses['200']?.content).toBeDefined();
+
+    const createOperation = z
+      .object({
+        requestBody: z.object({
+          required: z.boolean(),
+          content: z.record(
+            z.string(),
+            z.object({ schema: z.object({ $ref: z.string() }) }),
+          ),
+        }),
+      })
+      .parse(
+        z
+          .object({ post: z.unknown() })
+          .parse(document.paths['/api/v1/transactions']).post,
+      );
+    expect(createOperation.requestBody.required).toBe(true);
+    expect(createOperation.requestBody.content).toHaveProperty(
+      'application/json',
+    );
   });
 
   it('creates and reads a pending transaction', async () => {
@@ -112,8 +167,38 @@ describe('HealthController (e2e)', () => {
     await request(app.getHttpServer())
       .post('/api/v1/transactions')
       .set('Idempotency-Key', 'short')
+      .send({
+        productId: 'wireless-headphones',
+        quantity: 1,
+        customer: {
+          fullName: 'Ana Torres',
+          email: 'ana@example.com',
+          phone: '+573001234567',
+        },
+        delivery: {
+          addressLine: 'Carrera 7 # 80-10',
+          city: 'Bogotá',
+          region: 'Cundinamarca',
+          postalCode: '110221',
+        },
+      })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          code: 'INVALID_IDEMPOTENCY_KEY',
+        });
+      });
+
+    await request(app.getHttpServer())
+      .post('/api/v1/transactions')
+      .set('Idempotency-Key', 'checkout-attempt-invalid')
       .send({})
-      .expect(400);
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          code: 'VALIDATION_ERROR',
+        });
+      });
 
     await request(app.getHttpServer())
       .get('/api/v1/transactions/missing')

@@ -1,4 +1,8 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  BadRequestException,
+  INestApplication,
+  ValidationPipe,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
@@ -18,6 +22,11 @@ export function configureApplication(app: INestApplication): void {
   );
   app.useGlobalPipes(
     new ValidationPipe({
+      exceptionFactory: () =>
+        new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: 'Request validation failed',
+        }),
       forbidNonWhitelisted: true,
       transform: true,
       whitelist: true,

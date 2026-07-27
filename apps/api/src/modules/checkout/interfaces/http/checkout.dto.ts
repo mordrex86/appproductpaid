@@ -11,7 +11,8 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { TRANSACTION_STATUS } from '../../domain/transaction';
 
 export class CustomerDto {
   @ApiProperty({ example: 'Ana Torres' })
@@ -91,4 +92,91 @@ export class StartPaymentDto {
   @IsString()
   @Length(8, 2_000)
   personalDataToken!: string;
+}
+
+export class ProductResponseDto {
+  @ApiProperty({ example: 'wireless-headphones' })
+  id!: string;
+
+  @ApiProperty({ example: 'Audífonos inalámbricos' })
+  name!: string;
+
+  @ApiProperty()
+  description!: string;
+
+  @ApiProperty({ example: 12_990_000 })
+  priceInCents!: number;
+
+  @ApiProperty({ example: 12 })
+  stock!: number;
+}
+
+export class TransactionAmountsResponseDto {
+  @ApiProperty({ example: 12_990_000 })
+  product!: number;
+
+  @ApiProperty({ example: 200_000 })
+  baseFee!: number;
+
+  @ApiProperty({ example: 800_000 })
+  deliveryFee!: number;
+
+  @ApiProperty({ example: 13_990_000 })
+  total!: number;
+}
+
+export class TransactionResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ example: 'wireless-headphones' })
+  productId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  customerId!: string;
+
+  @ApiProperty({ minimum: 1, example: 1 })
+  quantity!: number;
+
+  @ApiProperty({ enum: Object.values(TRANSACTION_STATUS) })
+  status!: string;
+
+  @ApiPropertyOptional()
+  providerTransactionId?: string;
+
+  @ApiProperty({ type: TransactionAmountsResponseDto })
+  amounts!: TransactionAmountsResponseDto;
+
+  @ApiProperty({ format: 'date-time' })
+  createdAt!: string;
+}
+
+export class PaymentAgreementResponseDto {
+  @ApiProperty()
+  acceptanceToken!: string;
+
+  @ApiProperty({ format: 'uri' })
+  permalink!: string;
+}
+
+export class PaymentConfigurationResponseDto {
+  @ApiProperty()
+  publicKey!: string;
+
+  @ApiProperty({ format: 'uri' })
+  tokenizationUrl!: string;
+
+  @ApiProperty({ type: PaymentAgreementResponseDto })
+  terms!: PaymentAgreementResponseDto;
+
+  @ApiProperty({ type: PaymentAgreementResponseDto })
+  personalData!: PaymentAgreementResponseDto;
+}
+
+export class ErrorResponseDto {
+  @ApiProperty({ example: 'PRODUCT_NOT_FOUND' })
+  code!: string;
+
+  @ApiProperty({ example: 'Product not found' })
+  message!: string;
 }

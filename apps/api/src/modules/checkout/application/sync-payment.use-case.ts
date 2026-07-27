@@ -1,25 +1,28 @@
-import { Inject, Injectable } from '@nestjs/common';
+import type { CheckoutRepository } from './checkout.repository';
 import {
-  CHECKOUT_REPOSITORY,
-  type CheckoutRepository,
-} from './checkout.repository';
-import { TransactionNotFoundError } from './checkout.errors';
-import { PAYMENT_GATEWAY, type PaymentGateway } from './payment.gateway';
-import { TRANSACTION_STATUS } from '../domain/transaction';
+  isCheckoutError,
+  TransactionNotFoundError,
+  type CheckoutError,
+} from './checkout.errors';
+import type { PaymentGateway } from './payment.gateway';
+import {
+  TRANSACTION_STATUS,
+  type TransactionSnapshot,
+} from '../domain/transaction';
+import { failure, type Result, success } from './result';
 
-@Injectable()
 export class SyncPaymentUseCase {
   constructor(
-    @Inject(CHECKOUT_REPOSITORY)
     private readonly repository: CheckoutRepository,
-    @Inject(PAYMENT_GATEWAY)
     private readonly gateway: PaymentGateway,
   ) {}
 
-  async execute(transactionId: string) {
+  async execute(
+    transactionId: string,
+  ): Promise<Result<TransactionSnapshot, CheckoutError>> {
     const transaction = await this.repository.findTransaction(transactionId);
     if (transaction === undefined) {
-      throw new TransactionNotFoundError();
+      return failure(new TransactionNotFoundError());
     }
 
     const current = transaction.toSnapshot();
@@ -27,16 +30,23 @@ export class SyncPaymentUseCase {
       current.providerTransactionId === undefined ||
       current.status !== TRANSACTION_STATUS.pending
     ) {
-      return current;
+      return success(current);
     }
 
-    const payment = await this.gateway.getPayment(
-      current.providerTransactionId,
-    );
-    return (
-      await this.repository.savePaymentResult(
-        transaction.withPayment(payment.id, payment.status),
-      )
-    ).toSnapshot();
+    try {
+      const payment = await this.gateway.getPayment(
+        current.providerTransactionId,
+      );
+      return success(
+        (
+          await this.repository.savePaymentResult(
+            transaction.withPayment(payment.id, payment.status),
+          )
+        ).toSnapshot(),
+      );
+    } catch (error) {
+      if (isCheckoutError(error)) return failure(error);
+      throw error;
+    }
   }
 }

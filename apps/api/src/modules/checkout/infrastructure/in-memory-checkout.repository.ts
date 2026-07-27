@@ -20,6 +20,7 @@ export class InMemoryCheckoutRepository implements CheckoutRepository {
   private readonly transactions = new Map<string, Transaction>();
   private readonly checkouts = new Map<string, PendingCheckout>();
   private readonly idempotencyRecords = new Map<string, IdempotencyRecord>();
+  private readonly paymentClaims = new Set<string>();
 
   seedProduct(product: Product): Promise<void> {
     const snapshot = product.toSnapshot();
@@ -49,9 +50,10 @@ export class InMemoryCheckoutRepository implements CheckoutRepository {
     }
 
     const product = await this.findProduct(checkout.product.toSnapshot().id);
+    const productSnapshot = product?.toSnapshot();
     if (
-      product === undefined ||
-      product.toSnapshot().stock < checkout.transaction.toSnapshot().quantity
+      productSnapshot === undefined ||
+      productSnapshot.stock < checkout.transaction.toSnapshot().quantity
     ) {
       throw new InsufficientStockError();
     }
@@ -69,6 +71,33 @@ export class InMemoryCheckoutRepository implements CheckoutRepository {
 
   findTransaction(id: string): Promise<Transaction | undefined> {
     return Promise.resolve(this.transactions.get(id));
+  }
+
+  claimPayment(transaction: Transaction): Promise<boolean> {
+    const requested = transaction.toSnapshot();
+    const current = this.transactions.get(requested.id)?.toSnapshot();
+    if (
+      current === undefined ||
+      current.status !== TRANSACTION_STATUS.pending ||
+      current.providerTransactionId !== undefined ||
+      this.paymentClaims.has(requested.id)
+    ) {
+      return Promise.resolve(false);
+    }
+
+    const product = this.products.get(requested.productId)?.toSnapshot();
+    if (product === undefined || product.stock < requested.quantity) {
+      throw new InsufficientStockError();
+    }
+    this.products.set(
+      product.id,
+      Product.restore({
+        ...product,
+        stock: product.stock - requested.quantity,
+      }),
+    );
+    this.paymentClaims.add(requested.id);
+    return Promise.resolve(true);
   }
 
   findPaymentContext(transactionId: string) {
@@ -90,26 +119,22 @@ export class InMemoryCheckoutRepository implements CheckoutRepository {
 
     if (
       current.toSnapshot().status === TRANSACTION_STATUS.pending &&
-      next.status === TRANSACTION_STATUS.approved
+      transaction.releasesStockReservation()
     ) {
       const product = this.products.get(next.productId);
       const productSnapshot = product?.toSnapshot();
-      if (
-        productSnapshot === undefined ||
-        productSnapshot.stock < next.quantity
-      ) {
-        throw new InsufficientStockError();
-      }
+      if (productSnapshot === undefined) return Promise.resolve(transaction);
       this.products.set(
         next.productId,
         Product.restore({
           ...productSnapshot,
-          stock: productSnapshot.stock - next.quantity,
+          stock: productSnapshot.stock + next.quantity,
         }),
       );
     }
 
     if (current.toSnapshot().status === TRANSACTION_STATUS.pending) {
+      this.paymentClaims.delete(next.id);
       this.transactions.set(next.id, transaction);
       return Promise.resolve(transaction);
     }

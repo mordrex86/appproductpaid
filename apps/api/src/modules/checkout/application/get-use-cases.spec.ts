@@ -26,19 +26,22 @@ describe('checkout queries', () => {
     );
     const useCase = new GetProductUseCase(repository);
 
-    await expect(useCase.execute('product-1')).resolves.toEqual(
-      product.toSnapshot(),
-    );
-    await expect(useCase.execute('missing')).rejects.toBeInstanceOf(
-      ProductNotFoundError,
-    );
+    await expect(useCase.execute('product-1')).resolves.toEqual({
+      ok: true,
+      value: product.toSnapshot(),
+    });
+    const missing = await useCase.execute('missing');
+    expect(missing.ok).toBe(false);
+    if (missing.ok) throw new Error('Expected a missing product');
+    expect(missing.error).toBeInstanceOf(ProductNotFoundError);
   });
 
   it('maps a missing transaction', async () => {
     const useCase = new GetTransactionUseCase(new InMemoryCheckoutRepository());
 
-    await expect(useCase.execute('missing')).rejects.toBeInstanceOf(
-      TransactionNotFoundError,
-    );
+    const missing = await useCase.execute('missing');
+    expect(missing.ok).toBe(false);
+    if (missing.ok) throw new Error('Expected a missing transaction');
+    expect(missing.error).toBeInstanceOf(TransactionNotFoundError);
   });
 });

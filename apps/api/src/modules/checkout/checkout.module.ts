@@ -8,6 +8,8 @@ import { GetProductUseCase } from './application/get-product.use-case';
 import { GetTransactionUseCase } from './application/get-transaction.use-case';
 import { GetPaymentConfigurationUseCase } from './application/get-payment-configuration.use-case';
 import { PAYMENT_GATEWAY } from './application/payment.gateway';
+import type { PaymentGateway } from './application/payment.gateway';
+import type { CheckoutRepository } from './application/checkout.repository';
 import { StartPaymentUseCase } from './application/start-payment.use-case';
 import { SyncPaymentUseCase } from './application/sync-payment.use-case';
 import { CatalogSeedService } from './infrastructure/catalog-seed.service';
@@ -48,12 +50,42 @@ import { CheckoutController } from './interfaces/http/checkout.controller';
         ),
     },
     CatalogSeedService,
-    CreatePendingTransactionUseCase,
-    GetPaymentConfigurationUseCase,
-    GetProductUseCase,
-    GetTransactionUseCase,
-    StartPaymentUseCase,
-    SyncPaymentUseCase,
+    {
+      provide: CreatePendingTransactionUseCase,
+      inject: [CHECKOUT_REPOSITORY],
+      useFactory: (repository: CheckoutRepository) =>
+        new CreatePendingTransactionUseCase(repository),
+    },
+    {
+      provide: GetProductUseCase,
+      inject: [CHECKOUT_REPOSITORY],
+      useFactory: (repository: CheckoutRepository) =>
+        new GetProductUseCase(repository),
+    },
+    {
+      provide: GetTransactionUseCase,
+      inject: [CHECKOUT_REPOSITORY],
+      useFactory: (repository: CheckoutRepository) =>
+        new GetTransactionUseCase(repository),
+    },
+    {
+      provide: GetPaymentConfigurationUseCase,
+      inject: [PAYMENT_GATEWAY],
+      useFactory: (gateway: PaymentGateway) =>
+        new GetPaymentConfigurationUseCase(gateway),
+    },
+    {
+      provide: StartPaymentUseCase,
+      inject: [CHECKOUT_REPOSITORY, PAYMENT_GATEWAY],
+      useFactory: (repository: CheckoutRepository, gateway: PaymentGateway) =>
+        new StartPaymentUseCase(repository, gateway),
+    },
+    {
+      provide: SyncPaymentUseCase,
+      inject: [CHECKOUT_REPOSITORY, PAYMENT_GATEWAY],
+      useFactory: (repository: CheckoutRepository, gateway: PaymentGateway) =>
+        new SyncPaymentUseCase(repository, gateway),
+    },
   ],
 })
 export class CheckoutModule {}

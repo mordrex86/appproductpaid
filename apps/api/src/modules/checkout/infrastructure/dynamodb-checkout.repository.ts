@@ -18,6 +18,7 @@ import { TRANSACTION_STATUS } from '../domain/transaction';
 import {
   completedPaymentItems,
   idempotencyKey,
+  paymentClaimItems,
   pendingCheckoutItems,
   productKey,
   StoredCustomer,
@@ -45,6 +46,7 @@ export class DynamoDbCheckoutRepository implements CheckoutRepository {
         UpdateExpression:
           'SET id = :id, #name = :name, description = :description, ' +
           'priceInCents = :price, stock = if_not_exists(stock, :stock), ' +
+          'availableStock = if_not_exists(availableStock, :stock), ' +
           'entityType = :entityType, GSI1PK = :gsi1pk, GSI1SK = :gsi1sk',
         ExpressionAttributeNames: { '#name': 'name' },
         ExpressionAttributeValues: {
@@ -80,7 +82,7 @@ export class DynamoDbCheckoutRepository implements CheckoutRepository {
       name: item.name,
       description: item.description,
       priceInCents: item.priceInCents,
-      stock: item.stock,
+      stock: item.availableStock ?? item.stock,
     });
   }
 
@@ -141,6 +143,34 @@ export class DynamoDbCheckoutRepository implements CheckoutRepository {
     });
   }
 
+  async claimPayment(transaction: Transaction): Promise<boolean> {
+    const snapshot = transaction.toSnapshot();
+    try {
+      await this.client.send(
+        new TransactWriteCommand({
+          TransactItems: paymentClaimItems(
+            this.tableName,
+            snapshot,
+            new Date().toISOString(),
+          ),
+        }),
+      );
+      return true;
+    } catch (error) {
+      if (!this.isTransactionCanceled(error)) throw error;
+      const reasons = (
+        error as Error & {
+          CancellationReasons?: ReadonlyArray<{ Code?: string }>;
+        }
+      ).CancellationReasons;
+      if (reasons?.[1]?.Code === 'ConditionalCheckFailed') {
+        throw new InsufficientStockError();
+      }
+      if (reasons?.[0]?.Code === 'ConditionalCheckFailed') return false;
+      throw error;
+    }
+  }
+
   async findPaymentContext(transactionId: string) {
     const transaction = await this.findTransaction(transactionId);
     if (transaction === undefined) return undefined;
@@ -190,19 +220,22 @@ export class DynamoDbCheckoutRepository implements CheckoutRepository {
 
   async savePaymentResult(transaction: Transaction): Promise<Transaction> {
     const snapshot = transaction.toSnapshot();
-    if (snapshot.providerTransactionId === undefined) return transaction;
 
     if (snapshot.status === TRANSACTION_STATUS.pending) {
+      if (snapshot.providerTransactionId === undefined) return transaction;
       await this.client.send(
         new UpdateCommand({
           TableName: this.tableName,
           Key: { PK: transactionKey(snapshot.id), SK: 'TRANSACTION' },
           UpdateExpression:
-            'SET providerTransactionId = :providerId, #status = :status',
+            'SET providerTransactionId = :providerId, #status = :status REMOVE paymentClaimedAt',
+          ConditionExpression:
+            '#status = :pending AND attribute_exists(paymentClaimedAt)',
           ExpressionAttributeNames: { '#status': 'status' },
           ExpressionAttributeValues: {
             ':providerId': snapshot.providerTransactionId,
             ':status': snapshot.status,
+            ':pending': TRANSACTION_STATUS.pending,
           },
         }),
       );

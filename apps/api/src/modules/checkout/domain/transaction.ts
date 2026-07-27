@@ -42,7 +42,7 @@ export class Transaction {
   }): Transaction {
     const product = input.unitPriceInCents * input.quantity;
 
-    return new Transaction({
+    return Transaction.restore({
       id: input.id,
       productId: input.productId,
       customerId: input.customerId,
@@ -59,6 +59,31 @@ export class Transaction {
   }
 
   static restore(state: TransactionSnapshot): Transaction {
+    if (
+      state.id.length === 0 ||
+      state.productId.length === 0 ||
+      state.customerId.length === 0 ||
+      !Number.isInteger(state.quantity) ||
+      state.quantity <= 0 ||
+      !Object.values(TRANSACTION_STATUS).includes(state.status) ||
+      !Number.isInteger(state.amounts.product) ||
+      !Number.isInteger(state.amounts.baseFee) ||
+      !Number.isInteger(state.amounts.deliveryFee) ||
+      state.amounts.product <= 0 ||
+      state.amounts.baseFee < 0 ||
+      state.amounts.deliveryFee < 0 ||
+      state.amounts.total !==
+        state.amounts.product +
+          state.amounts.baseFee +
+          state.amounts.deliveryFee ||
+      ((state.status === TRANSACTION_STATUS.approved ||
+        state.status === TRANSACTION_STATUS.declined) &&
+        state.providerTransactionId === undefined) ||
+      Number.isNaN(Date.parse(state.createdAt))
+    ) {
+      throw new Error('Invalid transaction state');
+    }
+
     return new Transaction({
       ...state,
       amounts: { ...state.amounts },
@@ -69,11 +94,36 @@ export class Transaction {
     providerTransactionId: string,
     status: TransactionStatus,
   ): Transaction {
+    if (
+      this.state.status !== TRANSACTION_STATUS.pending ||
+      providerTransactionId.length === 0
+    ) {
+      throw new Error('Invalid payment transition');
+    }
+
     return Transaction.restore({
       ...this.state,
       providerTransactionId,
       status,
     });
+  }
+
+  failPayment(): Transaction {
+    if (this.state.status !== TRANSACTION_STATUS.pending) {
+      throw new Error('Invalid payment transition');
+    }
+
+    return Transaction.restore({
+      ...this.state,
+      status: TRANSACTION_STATUS.error,
+    });
+  }
+
+  releasesStockReservation(): boolean {
+    return (
+      this.state.status === TRANSACTION_STATUS.declined ||
+      this.state.status === TRANSACTION_STATUS.error
+    );
   }
 
   toSnapshot(): TransactionSnapshot {

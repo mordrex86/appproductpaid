@@ -1,10 +1,12 @@
-import { Inject, Injectable } from '@nestjs/common';
+import type { CheckoutRepository } from './checkout.repository';
 import {
-  CHECKOUT_REPOSITORY,
-  type CheckoutRepository,
-} from './checkout.repository';
-import { TransactionNotFoundError } from './checkout.errors';
-import { PAYMENT_GATEWAY, type PaymentGateway } from './payment.gateway';
+  isCheckoutError,
+  TransactionNotFoundError,
+  type CheckoutError,
+} from './checkout.errors';
+import type { PaymentGateway } from './payment.gateway';
+import type { TransactionSnapshot } from '../domain/transaction';
+import { failure, type Result, success } from './result';
 
 export interface StartPaymentCommand {
   readonly transactionId: string;
@@ -13,41 +15,61 @@ export interface StartPaymentCommand {
   readonly personalDataToken: string;
 }
 
-@Injectable()
 export class StartPaymentUseCase {
   constructor(
-    @Inject(CHECKOUT_REPOSITORY)
     private readonly repository: CheckoutRepository,
-    @Inject(PAYMENT_GATEWAY)
     private readonly gateway: PaymentGateway,
   ) {}
 
-  async execute(command: StartPaymentCommand) {
+  async execute(
+    command: StartPaymentCommand,
+  ): Promise<Result<TransactionSnapshot, CheckoutError>> {
     const context = await this.repository.findPaymentContext(
       command.transactionId,
     );
     if (context === undefined) {
-      throw new TransactionNotFoundError();
+      return failure(new TransactionNotFoundError());
     }
 
     const current = context.transaction.toSnapshot();
     if (current.providerTransactionId !== undefined) {
-      return current;
+      return success(current);
     }
 
-    const payment = await this.gateway.createPayment({
-      reference: current.id,
-      paymentToken: command.paymentToken,
-      acceptanceToken: command.acceptanceToken,
-      personalDataToken: command.personalDataToken,
-      amounts: current.amounts,
-      customer: context.customer,
-      delivery: context.delivery,
-    });
-    return (
-      await this.repository.savePaymentResult(
+    let claimed: boolean;
+    try {
+      claimed = await this.repository.claimPayment(context.transaction);
+    } catch (error) {
+      if (isCheckoutError(error)) return failure(error);
+      throw error;
+    }
+    if (!claimed) {
+      const transaction =
+        (await this.repository.findTransaction(current.id)) ??
+        context.transaction;
+      return success(transaction.toSnapshot());
+    }
+
+    try {
+      const payment = await this.gateway.createPayment({
+        reference: current.id,
+        paymentToken: command.paymentToken,
+        acceptanceToken: command.acceptanceToken,
+        personalDataToken: command.personalDataToken,
+        amounts: current.amounts,
+        customer: context.customer,
+        delivery: context.delivery,
+      });
+      const saved = await this.repository.savePaymentResult(
         context.transaction.withPayment(payment.id, payment.status),
-      )
-    ).toSnapshot();
+      );
+      return success(saved.toSnapshot());
+    } catch (error) {
+      await this.repository.savePaymentResult(
+        context.transaction.failPayment(),
+      );
+      if (isCheckoutError(error)) return failure(error);
+      throw error;
+    }
   }
 }
