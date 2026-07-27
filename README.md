@@ -137,8 +137,8 @@ Resultados de la última ejecución completa:
 
 | Proyecto | Pruebas | Statements | Branches | Functions |   Lines |
 | -------- | ------: | ---------: | -------: | --------: | ------: |
-| API      |      55 |    96,81 % |  89,02 % |   98,80 % | 96,81 % |
-| Web      |      22 |    94,94 % |  89,60 % |   90,27 % | 94,94 % |
+| API      |      59 |    97,46 % |  91,05 % |   98,85 % | 97,46 % |
+| Web      |      24 |    94,94 % |  89,65 % |   90,27 % | 94,94 % |
 
 La cobertura de frontend y backend supera el 80 % solicitado. También existen
 pruebas E2E de la API.

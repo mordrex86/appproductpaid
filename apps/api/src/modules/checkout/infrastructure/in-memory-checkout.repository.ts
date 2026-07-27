@@ -10,6 +10,8 @@ import { Product } from '../domain/product';
 import { Transaction } from '../domain/transaction';
 import { TRANSACTION_STATUS } from '../domain/transaction';
 
+const PAYMENT_CLAIM_TIMEOUT_MS = 60_000;
+
 interface IdempotencyRecord {
   readonly fingerprint: string;
   readonly transactionId: string;
@@ -20,7 +22,12 @@ export class InMemoryCheckoutRepository implements CheckoutRepository {
   private readonly transactions = new Map<string, Transaction>();
   private readonly checkouts = new Map<string, PendingCheckout>();
   private readonly idempotencyRecords = new Map<string, IdempotencyRecord>();
-  private readonly paymentClaims = new Set<string>();
+  private readonly paymentClaims = new Map<string, number>();
+
+  constructor(
+    private readonly now: () => number = Date.now,
+    private readonly paymentClaimTimeoutMs = PAYMENT_CLAIM_TIMEOUT_MS,
+  ) {}
 
   seedProduct(product: Product): Promise<void> {
     const snapshot = product.toSnapshot();
@@ -76,13 +83,20 @@ export class InMemoryCheckoutRepository implements CheckoutRepository {
   claimPayment(transaction: Transaction): Promise<boolean> {
     const requested = transaction.toSnapshot();
     const current = this.transactions.get(requested.id)?.toSnapshot();
+    const claimedAt = this.paymentClaims.get(requested.id);
     if (
       current === undefined ||
       current.status !== TRANSACTION_STATUS.pending ||
       current.providerTransactionId !== undefined ||
-      this.paymentClaims.has(requested.id)
+      (claimedAt !== undefined &&
+        claimedAt > this.now() - this.paymentClaimTimeoutMs)
     ) {
       return Promise.resolve(false);
+    }
+
+    if (claimedAt !== undefined) {
+      this.paymentClaims.set(requested.id, this.now());
+      return Promise.resolve(true);
     }
 
     const product = this.products.get(requested.productId)?.toSnapshot();
@@ -96,7 +110,7 @@ export class InMemoryCheckoutRepository implements CheckoutRepository {
         stock: product.stock - requested.quantity,
       }),
     );
-    this.paymentClaims.add(requested.id);
+    this.paymentClaims.set(requested.id, this.now());
     return Promise.resolve(true);
   }
 

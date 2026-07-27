@@ -38,13 +38,17 @@ describe('HealthController (e2e)', () => {
       title: 'Product payment API',
       version: '1.0',
     });
-    expect(document.paths).toHaveProperty('/api/v1/health');
-    expect(document.paths).toHaveProperty('/api/v1/products/{productId}');
-    expect(document.paths).toHaveProperty('/api/v1/transactions');
-    expect(document.paths).toHaveProperty('/api/v1/payments/config');
-    expect(document.paths).toHaveProperty(
+    for (const path of [
+      '/api/v1/health',
+      '/api/v1/payments/config',
+      '/api/v1/products/{productId}',
+      '/api/v1/transactions',
+      '/api/v1/transactions/{transactionId}',
       '/api/v1/transactions/{transactionId}/payment',
-    );
+      '/api/v1/transactions/{transactionId}/payment/status',
+    ]) {
+      expect(document.paths).toHaveProperty(path);
+    }
 
     const productOperation = z
       .object({
@@ -90,6 +94,7 @@ describe('HealthController (e2e)', () => {
             z.object({ schema: z.object({ $ref: z.string() }) }),
           ),
         }),
+        responses: z.record(z.string(), z.unknown()),
       })
       .parse(
         z
@@ -100,6 +105,23 @@ describe('HealthController (e2e)', () => {
     expect(createOperation.requestBody.content).toHaveProperty(
       'application/json',
     );
+    expect(createOperation.responses).toHaveProperty('404');
+    expect(createOperation.responses).toHaveProperty('409');
+
+    const paymentOperation = z
+      .object({
+        requestBody: z.object({ required: z.boolean() }),
+        responses: z.record(z.string(), z.unknown()),
+      })
+      .parse(
+        z
+          .object({ post: z.unknown() })
+          .parse(document.paths['/api/v1/transactions/{transactionId}/payment'])
+          .post,
+      );
+    expect(paymentOperation.requestBody.required).toBe(true);
+    expect(paymentOperation.responses).toHaveProperty('400');
+    expect(paymentOperation.responses).toHaveProperty('409');
   });
 
   it('creates and reads a pending transaction', async () => {

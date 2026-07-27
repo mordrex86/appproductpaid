@@ -93,6 +93,10 @@ export class CheckoutController {
     description: 'Solicitud o clave de idempotencia inválida.',
     type: ErrorResponseDto,
   })
+  @ApiNotFoundResponse({
+    description: 'Producto no encontrado.',
+    type: ErrorResponseDto,
+  })
   @ApiConflictResponse({
     description: 'Stock insuficiente o clave idempotente incompatible.',
     type: ErrorResponseDto,
@@ -170,8 +174,16 @@ export class CheckoutController {
     description: 'Pago enviado al proveedor.',
     type: TransactionResponseDto,
   })
+  @ApiBadRequestResponse({
+    description: 'Datos de pago inválidos.',
+    type: ErrorResponseDto,
+  })
   @ApiNotFoundResponse({
     description: 'Transacción no encontrada.',
+    type: ErrorResponseDto,
+  })
+  @ApiConflictResponse({
+    description: 'Stock insuficiente para procesar el pago.',
     type: ErrorResponseDto,
   })
   @ApiServiceUnavailableResponse({

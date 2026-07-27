@@ -109,6 +109,58 @@ describe('payment use cases', () => {
     ).toBe(2);
   });
 
+  it('persists a declined payment and releases the reserved stock', async () => {
+    const declined = Transaction.createPending({
+      id: 'transaction-declined',
+      productId: 'product-1',
+      customerId: 'customer-1',
+      quantity: 1,
+      unitPriceInCents: 10_000,
+      createdAt: '2026-07-26T00:00:00.000Z',
+    });
+    const product = await repository.findProduct('product-1');
+    if (product === undefined) throw new Error('Expected seeded product');
+    await repository.createPending({
+      idempotencyKey: 'checkout-attempt-declined',
+      requestFingerprint: 'fingerprint-declined',
+      product,
+      transaction: declined,
+      customer: {
+        id: 'customer-1',
+        fullName: 'Laura Medina',
+        email: 'laura@example.com',
+        phone: '+573001234567',
+      },
+      delivery: {
+        addressLine: 'Calle 10 # 20-30',
+        city: 'Bogotá',
+        region: 'Cundinamarca',
+        postalCode: '110111',
+      },
+    });
+    gateway.createPayment.mockResolvedValueOnce({
+      id: 'wompi-declined',
+      status: 'DECLINED',
+    });
+
+    await expect(
+      unwrap(
+        start.execute({
+          transactionId: 'transaction-declined',
+          paymentToken: 'tok_test_123',
+          acceptanceToken: 'acceptance-token',
+          personalDataToken: 'personal-token',
+        }),
+      ),
+    ).resolves.toMatchObject({
+      providerTransactionId: 'wompi-declined',
+      status: 'DECLINED',
+    });
+    expect(
+      (await repository.findProduct('product-1'))?.toSnapshot().stock,
+    ).toBe(2);
+  });
+
   it('rejects unknown transactions', async () => {
     const startResult = await start.execute({
       transactionId: 'missing',
@@ -260,6 +312,11 @@ describe('payment use cases', () => {
       expect(result.error).toBeInstanceOf(PaymentProviderError);
     }
 
+    expect(
+      (
+        await declinedRepository.findTransaction('declined-transaction')
+      )?.toSnapshot().status,
+    ).toBe('ERROR');
     expect(
       (await declinedRepository.findProduct('declined-product'))?.toSnapshot()
         .stock,
