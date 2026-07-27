@@ -244,11 +244,32 @@ describe('checkout application', () => {
   });
 
   it('handles a restored result without a transaction', async () => {
-    (globalThis.fetch as jest.Mock).mockResolvedValue(response(product));
+    (globalThis.fetch as jest.Mock).mockReturnValue(new Promise(() => {}));
     renderApp({ ...initialState, step: 'result' });
 
     expect(
       screen.getByRole('heading', { name: 'No encontramos tu compra' }),
     ).toBeInTheDocument();
+  });
+
+  it.each([
+    ['DECLINED', 'El pago no fue aprobado', 'No se realizó ningún cobro.'],
+    ['ERROR', 'No pudimos completar el pago', 'Intenta nuevamente.'],
+  ] as const)('shows the %s payment result', (status, title, description) => {
+    (globalThis.fetch as jest.Mock).mockReturnValue(new Promise(() => {}));
+    renderApp({
+      ...initialState,
+      product,
+      productStatus: 'succeeded',
+      step: 'result',
+      transaction: { ...transaction, status },
+      transactionStatus: 'succeeded',
+    });
+
+    expect(screen.getByRole('heading', { name: title })).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(description))).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Volver al producto' }),
+    ).toBeEnabled();
   });
 });

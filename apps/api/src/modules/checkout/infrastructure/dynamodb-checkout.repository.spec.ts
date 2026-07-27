@@ -200,18 +200,56 @@ describe('DynamoDbCheckoutRepository', () => {
   });
 
   it('claims a payment only once', async () => {
-    send.mockResolvedValueOnce({}).mockRejectedValueOnce(
-      Object.assign(new Error('already claimed'), {
-        name: 'TransactionCanceledException',
-        CancellationReasons: [
-          { Code: 'ConditionalCheckFailed' },
-          { Code: 'None' },
-        ],
-      }),
-    );
+    send
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(
+        Object.assign(new Error('already claimed'), {
+          name: 'TransactionCanceledException',
+          CancellationReasons: [
+            { Code: 'ConditionalCheckFailed' },
+            { Code: 'None' },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce({
+        Item: { paymentClaimedAt: new Date().toISOString() },
+      });
 
     await expect(repository.claimPayment(transaction)).resolves.toBe(true);
     await expect(repository.claimPayment(transaction)).resolves.toBe(false);
+  });
+
+  it('reclaims an expired payment without reserving stock again', async () => {
+    const now = new Date('2026-07-27T12:01:00.000Z');
+    const expiringRepository = new DynamoDbCheckoutRepository(
+      { send } as unknown as DynamoDBDocumentClient,
+      'payments',
+      () => now,
+      60_000,
+    );
+    send
+      .mockRejectedValueOnce(
+        Object.assign(new Error('expired claim'), {
+          name: 'TransactionCanceledException',
+          CancellationReasons: [
+            { Code: 'ConditionalCheckFailed' },
+            { Code: 'None' },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce({
+        Item: { paymentClaimedAt: '2026-07-27T12:00:00.000Z' },
+      })
+      .mockResolvedValueOnce({});
+
+    await expect(expiringRepository.claimPayment(transaction)).resolves.toBe(
+      true,
+    );
+
+    const reclaim = send.mock.calls[2]?.[0] as {
+      input?: { TransactItems?: unknown[] };
+    };
+    expect(reclaim.input?.TransactItems).toHaveLength(1);
   });
 
   it('rejects a payment claim when stock cannot be reserved', async () => {
@@ -230,7 +268,7 @@ describe('DynamoDbCheckoutRepository', () => {
     );
   });
 
-  it('persists pending and approved payment results', async () => {
+  it('persists payment results and releases failed reservations', async () => {
     const pending = transaction.withPayment('wompi-1', 'PENDING');
     send.mockResolvedValueOnce({});
     await expect(repository.savePaymentResult(pending)).resolves.toEqual(
@@ -242,6 +280,34 @@ describe('DynamoDbCheckoutRepository', () => {
     await expect(repository.savePaymentResult(approved)).resolves.toEqual(
       approved,
     );
-    expect(send).toHaveBeenCalledTimes(2);
+
+    const declined = transaction.withPayment('wompi-2', 'DECLINED');
+    send.mockResolvedValueOnce({});
+    await expect(repository.savePaymentResult(declined)).resolves.toEqual(
+      declined,
+    );
+
+    const failed = transaction.failPayment();
+    send.mockResolvedValueOnce({});
+    await expect(repository.savePaymentResult(failed)).resolves.toEqual(failed);
+
+    for (const call of send.mock.calls.slice(2)) {
+      const command = call[0] as {
+        input?: { TransactItems?: unknown[] };
+      };
+      expect(command.input?.TransactItems).toHaveLength(3);
+      expect(command.input?.TransactItems?.[1]).toMatchObject({
+        Update: {
+          ExpressionAttributeValues: {
+            ':status': 'CANCELLED',
+          },
+        },
+      });
+      expect(command.input?.TransactItems?.[2]).toMatchObject({
+        Update: {
+          UpdateExpression: 'SET availableStock = availableStock + :quantity',
+        },
+      });
+    }
   });
 });

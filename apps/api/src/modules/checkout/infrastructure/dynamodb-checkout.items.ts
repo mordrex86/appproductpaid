@@ -19,6 +19,7 @@ export interface StoredTransaction extends TransactionSnapshot {
   readonly entityType: 'TRANSACTION';
   readonly GSI1PK: string;
   readonly GSI1SK: string;
+  readonly paymentClaimedAt?: string;
 }
 
 export interface StoredIdempotency {
@@ -172,6 +173,35 @@ export function paymentClaimItems(
         ConditionExpression: 'availableStock >= :quantity',
         ExpressionAttributeValues: {
           ':quantity': transaction.quantity,
+        },
+      },
+    },
+  ];
+}
+
+export function expiredPaymentClaimItems(
+  tableName: string,
+  transaction: TransactionSnapshot,
+  previousClaimedAt: string,
+  claimedAt: string,
+): NonNullable<TransactWriteCommandInput['TransactItems']> {
+  return [
+    {
+      Update: {
+        TableName: tableName,
+        Key: {
+          PK: transactionKey(transaction.id),
+          SK: 'TRANSACTION',
+        },
+        UpdateExpression: 'SET paymentClaimedAt = :claimedAt',
+        ConditionExpression:
+          '#status = :pending AND attribute_not_exists(providerTransactionId) ' +
+          'AND paymentClaimedAt = :previousClaimedAt',
+        ExpressionAttributeNames: { '#status': 'status' },
+        ExpressionAttributeValues: {
+          ':claimedAt': claimedAt,
+          ':previousClaimedAt': previousClaimedAt,
+          ':pending': TRANSACTION_STATUS.pending,
         },
       },
     },

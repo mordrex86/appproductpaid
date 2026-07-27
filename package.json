@@ -12,7 +12,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "build:aws": "sam build --parallel --template-file infra/aws/application.yaml && node scripts/copy-swagger-assets.mjs",
+    "build:aws": "sam build --parallel --template-file infra/aws/application.yaml && node scripts/copy-swagger-assets.mjs && node scripts/check-bundled-swagger.mjs",
     "dev:api": "npm run dev --workspace @checkout/api",
     "dev:web": "npm run dev --workspace @checkout/web",
     "format": "prettier --write \"{apps,docs,infra}/**/*.{ts,tsx,js,cjs,mjs,json,css,html,md,yml,yaml}\" \".github/**/*.{yml,yaml}\" \"README.md\" \"package.json\" \".prettierrc.json\"",

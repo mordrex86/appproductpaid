@@ -29,11 +29,17 @@ import {
   toStoredProduct,
   transactionKey,
 } from './dynamodb-checkout.items';
+import {
+  PAYMENT_CLAIM_TIMEOUT_MS,
+  reclaimExpiredPaymentClaim,
+} from './dynamodb-payment-claim';
 
 export class DynamoDbCheckoutRepository implements CheckoutRepository {
   constructor(
     private readonly client: DynamoDBDocumentClient,
     private readonly tableName: string,
+    private readonly now: () => Date = () => new Date(),
+    private readonly paymentClaimTimeoutMs = PAYMENT_CLAIM_TIMEOUT_MS,
   ) {}
 
   async seedProduct(product: Product): Promise<void> {
@@ -145,14 +151,11 @@ export class DynamoDbCheckoutRepository implements CheckoutRepository {
 
   async claimPayment(transaction: Transaction): Promise<boolean> {
     const snapshot = transaction.toSnapshot();
+    const claimedAt = this.now().toISOString();
     try {
       await this.client.send(
         new TransactWriteCommand({
-          TransactItems: paymentClaimItems(
-            this.tableName,
-            snapshot,
-            new Date().toISOString(),
-          ),
+          TransactItems: paymentClaimItems(this.tableName, snapshot, claimedAt),
         }),
       );
       return true;
@@ -166,7 +169,15 @@ export class DynamoDbCheckoutRepository implements CheckoutRepository {
       if (reasons?.[1]?.Code === 'ConditionalCheckFailed') {
         throw new InsufficientStockError();
       }
-      if (reasons?.[0]?.Code === 'ConditionalCheckFailed') return false;
+      if (reasons?.[0]?.Code === 'ConditionalCheckFailed') {
+        return reclaimExpiredPaymentClaim(
+          this.client,
+          this.tableName,
+          snapshot,
+          claimedAt,
+          this.paymentClaimTimeoutMs,
+        );
+      }
       throw error;
     }
   }
