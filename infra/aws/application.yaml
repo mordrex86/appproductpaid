@@ -323,15 +323,6 @@ Resources:
             OriginRequestPolicyId: !Ref ApiOriginRequestPolicy
             TargetOriginId: ApiOrigin
             ViewerProtocolPolicy: redirect-to-https
-        CustomErrorResponses:
-          - ErrorCode: 403
-            ResponseCode: 200
-            ResponsePagePath: /index.html
-            ErrorCachingMinTTL: 0
-          - ErrorCode: 404
-            ResponseCode: 200
-            ResponsePagePath: /index.html
-            ErrorCachingMinTTL: 0
         ViewerCertificate:
           CloudFrontDefaultCertificate: true
 

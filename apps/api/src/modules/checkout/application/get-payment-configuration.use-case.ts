@@ -1,14 +1,16 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { PAYMENT_GATEWAY, type PaymentGateway } from './payment.gateway';
+import type { PaymentConfiguration, PaymentGateway } from './payment.gateway';
+import { isCheckoutError, type CheckoutError } from './checkout.errors';
+import { failure, type Result, success } from './result';
 
-@Injectable()
 export class GetPaymentConfigurationUseCase {
-  constructor(
-    @Inject(PAYMENT_GATEWAY)
-    private readonly gateway: PaymentGateway,
-  ) {}
+  constructor(private readonly gateway: PaymentGateway) {}
 
-  execute() {
-    return this.gateway.getConfiguration();
+  async execute(): Promise<Result<PaymentConfiguration, CheckoutError>> {
+    try {
+      return success(await this.gateway.getConfiguration());
+    } catch (error) {
+      if (isCheckoutError(error)) return failure(error);
+      throw error;
+    }
   }
 }

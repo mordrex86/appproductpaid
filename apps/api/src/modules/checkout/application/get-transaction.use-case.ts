@@ -1,23 +1,20 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { CHECKOUT_REPOSITORY } from './checkout.repository';
 import type { CheckoutRepository } from './checkout.repository';
 import { TransactionNotFoundError } from './checkout.errors';
 import type { TransactionSnapshot } from '../domain/transaction';
+import { failure, type Result, success } from './result';
 
-@Injectable()
 export class GetTransactionUseCase {
-  constructor(
-    @Inject(CHECKOUT_REPOSITORY)
-    private readonly repository: CheckoutRepository,
-  ) {}
+  constructor(private readonly repository: CheckoutRepository) {}
 
-  async execute(transactionId: string): Promise<TransactionSnapshot> {
+  async execute(
+    transactionId: string,
+  ): Promise<Result<TransactionSnapshot, TransactionNotFoundError>> {
     const transaction = await this.repository.findTransaction(transactionId);
 
     if (transaction === undefined) {
-      throw new TransactionNotFoundError();
+      return failure(new TransactionNotFoundError());
     }
 
-    return transaction.toSnapshot();
+    return success(transaction.toSnapshot());
   }
 }

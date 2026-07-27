@@ -31,6 +31,7 @@ export interface CheckoutRepository {
   findProduct(id: string): Promise<Product | undefined>;
   createPending(checkout: PendingCheckout): Promise<Transaction>;
   findTransaction(id: string): Promise<Transaction | undefined>;
+  claimPayment(transaction: Transaction): Promise<boolean>;
   findPaymentContext(transactionId: string): Promise<
     | {
         readonly transaction: Transaction;

@@ -102,6 +102,14 @@ describe('DynamoDbCheckoutRepository', () => {
 
     await expect(repository.createPending(checkout)).resolves.toBe(transaction);
     expect(send).toHaveBeenCalledTimes(1);
+    const command = send.mock.calls[0]?.[0] as {
+      input?: { TransactItems?: unknown[] };
+    };
+    expect(command.input?.TransactItems?.[0]).toMatchObject({
+      ConditionCheck: {
+        ConditionExpression: 'availableStock >= :quantity',
+      },
+    });
   });
 
   it('returns the existing transaction on an identical retry', async () => {
@@ -189,6 +197,37 @@ describe('DynamoDbCheckoutRepository', () => {
       customer: checkout.customer,
       delivery: checkout.delivery,
     });
+  });
+
+  it('claims a payment only once', async () => {
+    send.mockResolvedValueOnce({}).mockRejectedValueOnce(
+      Object.assign(new Error('already claimed'), {
+        name: 'TransactionCanceledException',
+        CancellationReasons: [
+          { Code: 'ConditionalCheckFailed' },
+          { Code: 'None' },
+        ],
+      }),
+    );
+
+    await expect(repository.claimPayment(transaction)).resolves.toBe(true);
+    await expect(repository.claimPayment(transaction)).resolves.toBe(false);
+  });
+
+  it('rejects a payment claim when stock cannot be reserved', async () => {
+    send.mockRejectedValueOnce(
+      Object.assign(new Error('stock unavailable'), {
+        name: 'TransactionCanceledException',
+        CancellationReasons: [
+          { Code: 'None' },
+          { Code: 'ConditionalCheckFailed' },
+        ],
+      }),
+    );
+
+    await expect(repository.claimPayment(transaction)).rejects.toBeInstanceOf(
+      InsufficientStockError,
+    );
   });
 
   it('persists pending and approved payment results', async () => {

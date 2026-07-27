@@ -33,3 +33,22 @@ export class PaymentProviderError extends Error {
     super(message);
   }
 }
+
+export type CheckoutError =
+  | ProductNotFoundError
+  | TransactionNotFoundError
+  | InsufficientStockError
+  | IdempotencyConflictError
+  | PaymentConfigurationError
+  | PaymentProviderError;
+
+export function isCheckoutError(error: unknown): error is CheckoutError {
+  return (
+    error instanceof ProductNotFoundError ||
+    error instanceof TransactionNotFoundError ||
+    error instanceof InsufficientStockError ||
+    error instanceof IdempotencyConflictError ||
+    error instanceof PaymentConfigurationError ||
+    error instanceof PaymentProviderError
+  );
+}

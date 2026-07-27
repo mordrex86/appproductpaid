@@ -32,11 +32,9 @@ export class WompiPaymentGateway implements PaymentGateway {
 
   async getConfiguration(): Promise<PaymentConfiguration> {
     const publicKey = this.required(this.publicKey);
-    const response = await this.read(
-      await this.request(`${this.apiUrl}/merchants/${publicKey}`, {
-        headers: { Accept: 'application/json' },
-      }),
-    );
+    const response = await this.send(`${this.apiUrl}/merchants/${publicKey}`, {
+      headers: { Accept: 'application/json' },
+    });
     const merchant = response.data as
       | {
           presigned_acceptance?: {
@@ -82,57 +80,53 @@ export class WompiPaymentGateway implements PaymentGateway {
         `${input.reference}${input.amounts.total}COP${this.required(this.integritySecret)}`,
       )
       .digest('hex');
-    const response = await this.read(
-      await this.request(`${this.apiUrl}/transactions`, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          Authorization: `Bearer ${privateKey}`,
-          'Content-Type': 'application/json',
+    const response = await this.send(`${this.apiUrl}/transactions`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${privateKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        acceptance_token: input.acceptanceToken,
+        accept_personal_auth: input.personalDataToken,
+        amount_in_cents: input.amounts.total,
+        currency: 'COP',
+        customer_email: input.customer.email,
+        customer_data: {
+          full_name: input.customer.fullName,
+          phone_number: input.customer.phone,
         },
-        body: JSON.stringify({
-          acceptance_token: input.acceptanceToken,
-          accept_personal_auth: input.personalDataToken,
-          amount_in_cents: input.amounts.total,
-          currency: 'COP',
-          customer_email: input.customer.email,
-          customer_data: {
-            full_name: input.customer.fullName,
-            phone_number: input.customer.phone,
-          },
-          payment_method: {
-            type: 'CARD',
-            token: input.paymentToken,
-            installments: 1,
-          },
-          payment_method_type: 'CARD',
-          reference: input.reference,
-          signature,
-          shipping_address: {
-            address_line_1: input.delivery.addressLine,
-            city: input.delivery.city,
-            country: 'CO',
-            name: input.customer.fullName,
-            phone_number: input.customer.phone,
-            postal_code: input.delivery.postalCode,
-            region: input.delivery.region,
-          },
-        }),
+        payment_method: {
+          type: 'CARD',
+          token: input.paymentToken,
+          installments: 1,
+        },
+        payment_method_type: 'CARD',
+        reference: input.reference,
+        signature,
+        shipping_address: {
+          address_line_1: input.delivery.addressLine,
+          city: input.delivery.city,
+          country: 'CO',
+          name: input.customer.fullName,
+          phone_number: input.customer.phone,
+          postal_code: input.delivery.postalCode,
+          region: input.delivery.region,
+        },
       }),
-    );
+    });
 
     return this.toPaymentResult(response.data);
   }
 
   async getPayment(id: string): Promise<PaymentResult> {
-    const response = await this.read(
-      await this.request(`${this.apiUrl}/transactions/${id}`, {
-        headers: {
-          Accept: 'application/json',
-          Authorization: `Bearer ${this.required(this.publicKey)}`,
-        },
-      }),
-    );
+    const response = await this.send(`${this.apiUrl}/transactions/${id}`, {
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${this.required(this.publicKey)}`,
+      },
+    });
     return this.toPaymentResult(response.data);
   }
 
@@ -141,6 +135,20 @@ export class WompiPaymentGateway implements PaymentGateway {
       throw new PaymentConfigurationError();
     }
     return value;
+  }
+
+  private async send(input: string, init: RequestInit): Promise<WompiResponse> {
+    try {
+      return await this.read(
+        await this.request(input, {
+          ...init,
+          signal: AbortSignal.timeout(10_000),
+        }),
+      );
+    } catch (error) {
+      if (error instanceof PaymentProviderError) throw error;
+      throw new PaymentProviderError();
+    }
   }
 
   private async read(response: Response): Promise<WompiResponse> {

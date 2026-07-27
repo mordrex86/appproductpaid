@@ -43,19 +43,25 @@ describe('CreatePendingTransactionUseCase', () => {
   }
 
   it('creates a pending transaction and calculates its total', async () => {
-    const { useCase } = await setup();
+    const { repository, useCase } = await setup();
 
     await expect(useCase.execute(command)).resolves.toMatchObject({
-      productId: 'product-1',
-      quantity: 2,
-      status: 'PENDING',
-      amounts: {
-        product: 20_000,
-        baseFee: 200_000,
-        deliveryFee: 800_000,
-        total: 1_020_000,
+      ok: true,
+      value: {
+        productId: 'product-1',
+        quantity: 2,
+        status: 'PENDING',
+        amounts: {
+          product: 20_000,
+          baseFee: 200_000,
+          deliveryFee: 800_000,
+          total: 1_020_000,
+        },
       },
     });
+    expect(
+      (await repository.findProduct('product-1'))?.toSnapshot().stock,
+    ).toBe(3);
   });
 
   it('returns the same transaction for an identical retry', async () => {
@@ -64,26 +70,35 @@ describe('CreatePendingTransactionUseCase', () => {
     const first = await useCase.execute(command);
     const retry = await useCase.execute(command);
 
-    expect(retry.id).toBe(first.id);
+    expect(first.ok && retry.ok && retry.value.id).toBe(
+      first.ok ? first.value.id : undefined,
+    );
   });
 
   it('rejects reuse of the key with a different request', async () => {
     const { useCase } = await setup();
     await useCase.execute(command);
 
-    await expect(
-      useCase.execute({ ...command, quantity: 1 }),
-    ).rejects.toBeInstanceOf(IdempotencyConflictError);
+    const result = await useCase.execute({ ...command, quantity: 1 });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected an idempotency conflict');
+    expect(result.error).toBeInstanceOf(IdempotencyConflictError);
   });
 
   it('rejects missing products and insufficient stock', async () => {
     const { useCase } = await setup(1);
 
-    await expect(
-      useCase.execute({ ...command, productId: 'missing' }),
-    ).rejects.toBeInstanceOf(ProductNotFoundError);
-    await expect(useCase.execute(command)).rejects.toBeInstanceOf(
-      InsufficientStockError,
-    );
+    const missing = await useCase.execute({
+      ...command,
+      productId: 'missing',
+    });
+    expect(missing.ok).toBe(false);
+    if (missing.ok) throw new Error('Expected a missing product');
+    expect(missing.error).toBeInstanceOf(ProductNotFoundError);
+
+    const unavailable = await useCase.execute(command);
+    expect(unavailable.ok).toBe(false);
+    if (unavailable.ok) throw new Error('Expected unavailable stock');
+    expect(unavailable.error).toBeInstanceOf(InsufficientStockError);
   });
 });

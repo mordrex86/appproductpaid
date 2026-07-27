@@ -79,8 +79,14 @@ describe('CheckoutController', () => {
   });
 
   it('returns products and transactions', async () => {
-    getProduct.execute.mockResolvedValueOnce({ id: 'product-1' });
-    getTransaction.execute.mockResolvedValueOnce({ id: 'transaction-1' });
+    getProduct.execute.mockResolvedValueOnce({
+      ok: true,
+      value: { id: 'product-1' },
+    });
+    getTransaction.execute.mockResolvedValueOnce({
+      ok: true,
+      value: { id: 'transaction-1' },
+    });
 
     await expect(controller.findProduct('product-1')).resolves.toEqual({
       id: 'product-1',
@@ -91,7 +97,10 @@ describe('CheckoutController', () => {
   });
 
   it('creates a pending transaction with a valid key', async () => {
-    createPending.execute.mockResolvedValueOnce({ id: 'transaction-1' });
+    createPending.execute.mockResolvedValueOnce({
+      ok: true,
+      value: { id: 'transaction-1' },
+    });
 
     await expect(
       controller.createTransaction('checkout-attempt-0001', body),
@@ -100,10 +109,17 @@ describe('CheckoutController', () => {
 
   it('gets payment configuration, starts and synchronizes payments', async () => {
     getPaymentConfiguration.execute.mockResolvedValueOnce({
-      publicKey: 'pub_test',
+      ok: true,
+      value: { publicKey: 'pub_test' },
     });
-    startPayment.execute.mockResolvedValueOnce({ status: 'PENDING' });
-    syncPayment.execute.mockResolvedValueOnce({ status: 'APPROVED' });
+    startPayment.execute.mockResolvedValueOnce({
+      ok: true,
+      value: { status: 'PENDING' },
+    });
+    syncPayment.execute.mockResolvedValueOnce({
+      ok: true,
+      value: { status: 'APPROVED' },
+    });
 
     await expect(controller.paymentConfiguration()).resolves.toEqual({
       publicKey: 'pub_test',
@@ -126,7 +142,7 @@ describe('CheckoutController', () => {
     [new PaymentProviderError(), ServiceUnavailableException],
     [new InsufficientStockError(), ConflictException],
   ])('maps expected payment errors', async (error, expected) => {
-    startPayment.execute.mockRejectedValueOnce(error);
+    startPayment.execute.mockResolvedValueOnce({ ok: false, error });
     await expect(
       controller.pay('transaction-1', {
         paymentToken: 'tok_test_123',
@@ -150,7 +166,7 @@ describe('CheckoutController', () => {
     [new InsufficientStockError(), ConflictException],
     [new IdempotencyConflictError(), ConflictException],
   ])('maps expected create errors', async (error, expected) => {
-    createPending.execute.mockRejectedValueOnce(error);
+    createPending.execute.mockResolvedValueOnce({ ok: false, error });
 
     await expect(
       controller.createTransaction('checkout-attempt-0001', body),
@@ -158,14 +174,18 @@ describe('CheckoutController', () => {
   });
 
   it('maps missing resources and rethrows unexpected failures', async () => {
-    getProduct.execute.mockRejectedValueOnce(new ProductNotFoundError());
+    getProduct.execute.mockResolvedValueOnce({
+      ok: false,
+      error: new ProductNotFoundError(),
+    });
     await expect(controller.findProduct('missing')).rejects.toBeInstanceOf(
       NotFoundException,
     );
 
-    getTransaction.execute.mockRejectedValueOnce(
-      new TransactionNotFoundError(),
-    );
+    getTransaction.execute.mockResolvedValueOnce({
+      ok: false,
+      error: new TransactionNotFoundError(),
+    });
     await expect(controller.findTransaction('missing')).rejects.toBeInstanceOf(
       NotFoundException,
     );

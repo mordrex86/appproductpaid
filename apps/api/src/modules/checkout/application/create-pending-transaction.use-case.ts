@@ -1,16 +1,16 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { Inject, Injectable } from '@nestjs/common';
-import { CHECKOUT_REPOSITORY } from './checkout.repository';
 import type {
   CheckoutRepository,
   CustomerData,
   DeliveryData,
 } from './checkout.repository';
 import {
-  InsufficientStockError,
+  isCheckoutError,
   ProductNotFoundError,
+  type CheckoutError,
 } from './checkout.errors';
 import { Transaction, TransactionSnapshot } from '../domain/transaction';
+import { failure, type Result, success } from './result';
 
 export interface CreatePendingTransactionCommand {
   readonly idempotencyKey: string;
@@ -20,26 +20,16 @@ export interface CreatePendingTransactionCommand {
   readonly delivery: DeliveryData;
 }
 
-@Injectable()
 export class CreatePendingTransactionUseCase {
-  constructor(
-    @Inject(CHECKOUT_REPOSITORY)
-    private readonly repository: CheckoutRepository,
-  ) {}
+  constructor(private readonly repository: CheckoutRepository) {}
 
   async execute(
     command: CreatePendingTransactionCommand,
-  ): Promise<TransactionSnapshot> {
+  ): Promise<Result<TransactionSnapshot, CheckoutError>> {
     const product = await this.repository.findProduct(command.productId);
 
     if (product === undefined) {
-      throw new ProductNotFoundError();
-    }
-
-    try {
-      product.ensureAvailable(command.quantity);
-    } catch {
-      throw new InsufficientStockError();
+      return failure(new ProductNotFoundError());
     }
 
     const customerId = randomUUID();
@@ -62,19 +52,24 @@ export class CreatePendingTransactionUseCase {
       )
       .digest('hex');
 
-    const saved = await this.repository.createPending({
-      idempotencyKey: command.idempotencyKey,
-      requestFingerprint,
-      product,
-      customer: {
-        id: customerId,
-        ...command.customer,
-        email: command.customer.email.toLowerCase(),
-      },
-      delivery: command.delivery,
-      transaction,
-    });
+    try {
+      const saved = await this.repository.createPending({
+        idempotencyKey: command.idempotencyKey,
+        requestFingerprint,
+        product,
+        customer: {
+          id: customerId,
+          ...command.customer,
+          email: command.customer.email.toLowerCase(),
+        },
+        delivery: command.delivery,
+        transaction,
+      });
 
-    return saved.toSnapshot();
+      return success(saved.toSnapshot());
+    } catch (error) {
+      if (isCheckoutError(error)) return failure(error);
+      throw error;
+    }
   }
 }

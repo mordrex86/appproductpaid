@@ -10,6 +10,7 @@ export interface StoredProduct extends ProductSnapshot {
   readonly entityType: 'PRODUCT';
   readonly GSI1PK: 'PRODUCTS';
   readonly GSI1SK: string;
+  readonly availableStock?: number;
 }
 
 export interface StoredTransaction extends TransactionSnapshot {
@@ -79,7 +80,7 @@ export function pendingCheckoutItems(
       ConditionCheck: {
         TableName: tableName,
         Key: { PK: productKey(productId), SK: 'METADATA' },
-        ConditionExpression: 'stock >= :quantity',
+        ConditionExpression: 'availableStock >= :quantity',
         ExpressionAttributeValues: { ':quantity': transaction.quantity },
       },
     },
@@ -136,21 +137,66 @@ export function pendingCheckoutItems(
   ];
 }
 
+export function paymentClaimItems(
+  tableName: string,
+  transaction: TransactionSnapshot,
+  claimedAt: string,
+): NonNullable<TransactWriteCommandInput['TransactItems']> {
+  return [
+    {
+      Update: {
+        TableName: tableName,
+        Key: {
+          PK: transactionKey(transaction.id),
+          SK: 'TRANSACTION',
+        },
+        UpdateExpression: 'SET paymentClaimedAt = :claimedAt',
+        ConditionExpression:
+          '#status = :pending AND attribute_not_exists(providerTransactionId) ' +
+          'AND attribute_not_exists(paymentClaimedAt)',
+        ExpressionAttributeNames: { '#status': 'status' },
+        ExpressionAttributeValues: {
+          ':claimedAt': claimedAt,
+          ':pending': TRANSACTION_STATUS.pending,
+        },
+      },
+    },
+    {
+      Update: {
+        TableName: tableName,
+        Key: {
+          PK: productKey(transaction.productId),
+          SK: 'METADATA',
+        },
+        UpdateExpression: 'SET availableStock = availableStock - :quantity',
+        ConditionExpression: 'availableStock >= :quantity',
+        ExpressionAttributeValues: {
+          ':quantity': transaction.quantity,
+        },
+      },
+    },
+  ];
+}
+
 export function completedPaymentItems(
   tableName: string,
   transaction: TransactionSnapshot,
 ): NonNullable<TransactWriteCommandInput['TransactItems']> {
+  const hasProvider = transaction.providerTransactionId !== undefined;
   const updates: NonNullable<TransactWriteCommandInput['TransactItems']> = [
     {
       Update: {
         TableName: tableName,
         Key: { PK: transactionKey(transaction.id), SK: 'TRANSACTION' },
-        UpdateExpression:
-          'SET providerTransactionId = :providerId, #status = :status',
+        UpdateExpression: hasProvider
+          ? 'SET providerTransactionId = :providerId, #status = :status REMOVE paymentClaimedAt'
+          : 'SET #status = :status REMOVE paymentClaimedAt',
         ConditionExpression: '#status = :pending',
         ExpressionAttributeNames: { '#status': 'status' },
         ExpressionAttributeValues: {
-          ':providerId': transaction.providerTransactionId,
+          ...(hasProvider
+            ? { ':providerId': transaction.providerTransactionId }
+            : {}),
           ':status': transaction.status,
           ':pending': TRANSACTION_STATUS.pending,
         },
@@ -179,6 +225,18 @@ export function completedPaymentItems(
         Key: { PK: productKey(transaction.productId), SK: 'METADATA' },
         UpdateExpression: 'SET stock = stock - :quantity',
         ConditionExpression: 'stock >= :quantity',
+        ExpressionAttributeValues: { ':quantity': transaction.quantity },
+      },
+    });
+  } else if (
+    transaction.status === TRANSACTION_STATUS.declined ||
+    transaction.status === TRANSACTION_STATUS.error
+  ) {
+    updates.push({
+      Update: {
+        TableName: tableName,
+        Key: { PK: productKey(transaction.productId), SK: 'METADATA' },
+        UpdateExpression: 'SET availableStock = availableStock + :quantity',
         ExpressionAttributeValues: { ':quantity': transaction.quantity },
       },
     });
