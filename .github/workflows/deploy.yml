@@ -158,7 +158,7 @@ jobs:
             --output /dev/null --write-out "%{content_type}" \
             "${{ steps.outputs.outputs.web_url }}/docs/swagger-ui-bundle.js")
           case "$docs_content_type" in
-            application/javascript*) ;;
+            application/javascript*|text/javascript*) ;;
             *) echo "Unexpected Swagger asset content type: $docs_content_type"; exit 1 ;;
           esac
           curl --fail --silent --show-error \
